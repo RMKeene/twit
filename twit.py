@@ -39,7 +39,7 @@ TWIT_FAN_IN = 1
 # Destination span is greater.
 TWIT_FAN_OUT = 2
 
-def tryParseInt(value, default_value=0):
+def tryParseInt(value=None, default_value=0):
     """
     Try to parse a string value to an int.  Returns the value and True
     e.g.  tryParseInt("42", 7) returns (42, True)
@@ -52,7 +52,7 @@ def tryParseInt(value, default_value=0):
         return default_value, False
 
 
-def tryParseFloat(value, default_value=0.0):
+def tryParseFloat(value=None, default_value=0.0):
     """
     Try to parse a string value to an float.  Returns the value and True
     e.g.  tryParseInt("42.42", 7.3) returns (42.42, True)

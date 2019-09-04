@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="twit-rkeene",
-    version="0.0.5",
+    name="twit",
+    version="0.0.7",
     author="Richard Keene",
     author_email="rmkeene@gmail.com",
     description="Tensor Weighted Interpolative Transfer",
