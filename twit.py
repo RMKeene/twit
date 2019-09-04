@@ -27,7 +27,7 @@ The interpolater (iterator) generates three element tuples that are (srcidx, dst
 """
 
 import numpy as np
-
+from collections import defaultdict
 
 def tryParseInt(value, default_value=0):
     if value is None:
@@ -360,11 +360,9 @@ class twit_single_axis_discrete:
                     # We use an array (rather than a tuple) so it is in-place modifiable.
                     self.value_cache.append([sp[0], dsti, sp[1]])
             # Normalize
-            dstsums = {}
+            dstsums = defaultdict(float)
             for v in self.value_cache:
                 di = v[1]
-                if di not in dstsums:
-                    dstsums[di] = 0.0
                 dstsums[di] = dstsums[di] + v[2]
             for x in self.value_cache:
                 x[2] = x[2] * twit_interp(self.src_range, self.weight_range, x[0]) / dstsums[x[1]]
@@ -375,16 +373,12 @@ class twit_single_axis_discrete:
                 for sp in splits:
                     self.value_cache.append([srci, sp[0], sp[1]])
             # Normalize
-            dstsums = {}
-            srcsums = {}
+            dstsums = defaultdict(float)
+            srcsums = defaultdict(float)
             for v in self.value_cache:
                 si = v[0]
-                if si not in srcsums:
-                    srcsums[si] = 0.0
                 srcsums[si] = srcsums[si] + v[2]
                 di = v[1]
-                if di not in dstsums:
-                    dstsums[di] = 0.0
                 dstsums[di] = dstsums[di] + v[2]
             for x in self.value_cache:
                 src_to_dst_ratio = srcsums[x[0]] / dstsums[x[1]]
