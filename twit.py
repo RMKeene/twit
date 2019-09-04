@@ -24,26 +24,44 @@ Reversed number (first is higher than second) indicates a reverse range to inter
 Whichever index range is the largest determines how many steps along both indexes we generate.
 The interpolater (iterator) generates three element tuples that are (srcidx, dstidx, weight) in a series. 
 
+Why? Because SRS, Cognate and NuTank are doing neural net as concept maps and we transfer or 'wire'
+connections between concept maps. Also lets one do image scale and crop on tensors directly
+without having to resort to PIL scale etc. and conversion back and forth.
 """
 
 import numpy as np
 from collections import defaultdict
 
+# Source and destination span are the same.
+TWIT_FAN_SAME = 0
+# Source index span is greater than destination span.
+TWIT_FAN_IN = 1
+# Destination span is greater.
+TWIT_FAN_OUT = 2
+
 def tryParseInt(value, default_value=0):
-    if value is None:
-        return default_value, False
+    """
+    Try to parse a string value to an int.  Returns the value and True
+    e.g.  tryParseInt("42", 7) returns (42, True)
+    tryParseInt("abcdef", 7) returns (7, False)
+    See twit_test.py
+    """
     try:
         return int(value), True
-    except ValueError:
+    except (ValueError, TypeError):
         return default_value, False
 
 
 def tryParseFloat(value, default_value=0.0):
-    if value is None:
-        return default_value, False
+    """
+    Try to parse a string value to an float.  Returns the value and True
+    e.g.  tryParseInt("42.42", 7.3) returns (42.42, True)
+    tryParseInt("abcdef", 7.3) returns (7.3, False)
+    See twit_test.py
+    """
     try:
         return float(value), True
-    except ValueError:
+    except (ValueError, TypeError):
         return default_value, False
 
 
@@ -52,6 +70,7 @@ def split_strip(s: str, sep=' '):
     Split s into parts on delimiter, then strip the sub strings and remove any blanks.
     Never returns None.
     Returns an array of the sub strings.  The returned array my be empty.
+    See twit_test.py for examples.
     """
     if s is None:
         return []
@@ -78,18 +97,18 @@ def twit_interp(range:tuple, v: tuple, idx: int):
     rspan = range[1] - range[0]
     if rspan == 0:
         return v[0]
-    vspan = v[1] - v[0]
     return v[0] + (v[1] - v[0]) * (idx - range[0]) / rspan
     """
     rspan = range[1] - range[0]
     if rspan == 0:
         return v[0]
-    vspan = v[1] - v[0]
     return v[0] + (v[1] - v[0]) * (idx - range[0]) / rspan
 
 
-
 def outside_range(range: tuple, idx: int):
+    """
+    True if idx is not between range[0] and range[1] inclusive.
+    """
     if range[0] <= range[1]:
         return idx < range[0] or idx > range[1]
     return idx < range[1] or idx > range[0]
@@ -98,7 +117,7 @@ def outside_range(range: tuple, idx: int):
 def twit_str_to_ranges(src, src_shape_idx, dst, dst_shape_idx, s: str) -> tuple:
     """ Converts a TWIT string for a single dimension to three pairs in a tuple. 
     Input s is like "{5,17} <2,3> [-0.1, 0.9]" (see doc string for the module)
-    Format is ((srcstart, srcend), (dststart, dstend), (weightstart, weightend)).
+    Return is ((srcstart, srcend), (dststart, dstend), (weightstart, weightend)).
     src, dst, etc are to determine the ranges. The ..._shape_idx are which dimension of the array to use
     for defaults.
 
@@ -124,10 +143,10 @@ def twit_str_to_ranges(src, src_shape_idx, dst, dst_shape_idx, s: str) -> tuple:
     return twit_string_to_ranges_internal(src_low_idx, src_hi_idx, dst_low_idx, dst_hi_idx, weight_low, weight_hi, s)
 
 
-def parse_single_range_part(low, hi, s, leading, trailing, try_parse_func, enforce_low_hi=False):
+def parse_single_range_part(low, hi, s, leading='{', trailing='}', try_parse_func=tryParseInt, enforce_low_hi=False):
     """
-    In s expect some bracketed number pair. s is like "{5,17} <2,3> [-0.1, 0.9]"
-    and we mayu want what is between { and }.
+    In s expect some bracketed number pairs. s is like "{5,17} <2,3> [-0.1, 0.9]"
+    and we may want what is between { and }.
     low is the default low value.
     hi is the default hi value.
     leading and trailing are the brackets, like "{" and "}".
@@ -137,28 +156,8 @@ def parse_single_range_part(low, hi, s, leading, trailing, try_parse_func, enfor
     So 
         0, 20, "{", "}", tryParseInt, "{5,17} <2,3> [-0.1, 0.9]", True
     returns (5,17)
-    See __main__ at the end of this file for examples.
-
-    try_parse_func is the tryParseInt or tryParseFloat function. Must be like
-
-    def tryParseInt(value, default_value = 0):
-        if value is None:
-            return default_value, False
-        try:
-            return int(value), True
-        except ValueError:
-            return default_value, False
-
-
-    def tryParseFloat(value, default_value = 0.0):
-        if value is None:
-            return default_value, False
-        try:
-            return float(value), True
-        except ValueError:
-            return default_value, False
+    See twit_string_to_ranges_internal for examples.
     """
-
     lowin = low
     hiin = hi
     iss = s.find(leading)
@@ -220,18 +219,9 @@ def twit_string_to_ranges_internal(src_low_default, src_hi_default, dst_low_defa
         return (None, 'Invalid destination range')
     weight_low, weight_hi = parse_single_range_part(weight_low, weight_hi, s, "[", "]", tryParseFloat, False)
     if weight_low is None:
-        return (None, 'Invalid destination range')
+        return (None, 'Invalid weight range')
        
     return ((src_low_idx, src_hi_idx), (dst_low_idx, dst_hi_idx), (weight_low, weight_hi))
-
-
-class twit_fan_enum:
-    # Source and destination span are the same.
-    FAN_SAME = 0
-    # Source index span is greater than destination span.
-    FAN_IN = 1
-    # Destination span is greater.
-    FAN_OUT = 2
 
 
 def find_range_series_multipliers(narrow_range, wide_range, narrow_idx):
@@ -304,22 +294,14 @@ def find_range_series_multipliers(narrow_range, wide_range, narrow_idx):
 
 class twit_single_axis_discrete:
     """
-    Encapsulates a twit_single_axis and iterates a series of integet indices and float weights.
+    Encapsulates a twit_single_axis and iterates a series of integer indices and float weights.
     Currently only works with axis_range like ((start_source_idx, start_dest_idx, start_weight), (end_source_idx, end_dest_idx, end_weight)).
-    This provides the fan in or fan out to discrete tensors.
-    For example a single iteration of a twit_single_axis  that is 10 source to 4 destination,
-    it is fan-in source to destination so a single iterationm from the twit_single_axis
-    might be (1.0, 1.7, 0.3) being (source idx, dest idx, weight).  
+    This provides the fan in or fan out to discrete tensor indicies along one axis. 
     """
 
     def __init__(self, axis_range: tuple):
-        # TODO - Make this more general.  Maybe handle >= 3 elements so
-        # multiple dependent values
-        # can be interpolated.
         if len(axis_range) != 2 or len(axis_range[0]) != 3 or len(axis_range[1]) != 3:
            raise Exception("twit_single_axis_discrete only applies to a source and destination ranges and a weight.")
-        self.next_returns = []
-        self._ended_ = False
         # Our spans are inclusive so the + 1 on the end here.
         self.src_range = (axis_range[0][0], axis_range[1][0])
         self.dst_range = (axis_range[0][1], axis_range[1][1])
@@ -329,31 +311,42 @@ class twit_single_axis_discrete:
         # Weight span is signed and is the simple difference.
         self.weight_span = self.weight_range[1] - self.weight_range[0]
         if self.input_span == self.output_span:
-            self.fan = twit_fan_enum.FAN_SAME
+            self.fan = TWIT_FAN_SAME
         elif self.input_span > self.output_span:
-            self.fan = twit_fan_enum.FAN_IN
+            self.fan = TWIT_FAN_IN
         else:
-            self.fan = twit_fan_enum.FAN_OUT
+            self.fan = TWIT_FAN_OUT
+
         self.src_idx = self.src_range[0]
         self.dst_idx = self.dst_range[0]
-        self.src_inc = 1
+
         if self.src_range[1] < self.src_range[0]:
             self.src_inc = -1
-        self.dst_inc = 1
+        else:
+            self.src_inc = 1
+
         if self.dst_range[1] < self.dst_range[0]:
             self.dst_inc = -1
+        else:
+            self.dst_inc = 1
+
         self.value_cache = []
 
 
-    def generate_value_cache(self):
+    def _generate_value_cache(self):
+        """
+        Make a list of all return values for iterating.  This is necessary because
+        normalization of weighting between disparate axis index counts requires knowing
+        in advance the weights of the fan in or fan out.
+        """
         self.value_cache.clear()
-        if self.fan == twit_fan_enum.FAN_SAME:
+        if self.fan == TWIT_FAN_SAME:
             dsti = self.dst_range[0]
             for srci in range(int(self.src_range[0]), int(self.src_range[1]) + self.src_inc, self.src_inc):
                 self.value_cache.append((srci, dsti, twit_interp(self.src_range, self.weight_range, srci)))
                 dsti += self.dst_inc
             # Normalization not needed for one to one.
-        elif self.fan == twit_fan_enum.FAN_IN:
+        elif self.fan == TWIT_FAN_IN:
             for dsti in range(int(self.dst_range[0]), int(self.dst_range[1]) + self.dst_inc, self.dst_inc):
                 splits = find_range_series_multipliers(self.dst_range, self.src_range, dsti)
                 for sp in splits:
@@ -366,7 +359,6 @@ class twit_single_axis_discrete:
                 dstsums[di] = dstsums[di] + v[2]
             for x in self.value_cache:
                 x[2] = x[2] * twit_interp(self.src_range, self.weight_range, x[0]) / dstsums[x[1]]
-            pass
         else: # Fan out
             for srci in range(int(self.src_range[0]), int(self.src_range[1]) + self.src_inc, self.src_inc):
                 splits = find_range_series_multipliers(self.src_range, self.dst_range, srci)
@@ -381,10 +373,7 @@ class twit_single_axis_discrete:
                 di = v[1]
                 dstsums[di] = dstsums[di] + v[2]
             for x in self.value_cache:
-                src_to_dst_ratio = srcsums[x[0]] / dstsums[x[1]]
                 x[2] = x[2] * twit_interp(self.dst_range, self.weight_range, x[1]) / dstsums[x[1]]
-            pass
-        pass
 
     
     def __iter__(self):
@@ -399,27 +388,20 @@ class twit_single_axis_discrete:
 
 
     def reset(self):
-        self.generate_value_cache()
-        self.next_returns = []
-        self._ended_ = False
-
-
-    def is_at_end():
-        return self._ended_
+        self._generate_value_cache()
 
 
 class twit:
     """
     A Tensor Weighted Interpolative Transfer iterator multi dimensional. See top of this twit.py file.
-    __next__() returns a tuple of tuples one for each axis.
+    __next__() returns a tuple of 3 entry tuples, one for each axis.
     being
-    ((SrcNidx, DstNidx, WeightNidx) for each axis down to axis 0) assuming we are 
-    doing neural net weighted connections between concept maps.
+    ((SrcNidx, DstNidx, WeightNidx) for each axis down to axis 0)
     Works for 1 to N dimensions.
 
     If you are generating the connections between two tensors of diffent count of axis, 
-    e.g. len(t1.shape) != len(t2.shape) then have the index range and weight for the shorter number of exes be (0, 0, 1.0)
-
+    e.g. len(t1.shape) != len(t2.shape) then have the index range and weight for the shorter number of axies be (0, 0, 1.0)
+    See apply_twit(...) function at end of twit.py
     """
 
     def __init__(self, ranges: tuple):
@@ -428,19 +410,24 @@ class twit:
         (((srcstart, srcend), (dststart, dstend), (weightstart, weightend)), ... each axis down to axis 0 ).
         The src and dst are int, weights are float.
         """
+        assert(isinstance(ranges, tuple))
+        assert(len(ranges) > 0)
+        for i in ranges:
+            assert(len(i) == 3)
+
         self.ranges = ranges
         # The iterators and axes are in the same order as python axis
         # so innermost (x) most rapidly changing last.
         self.iterators = []
+        # We are doing a cascade of iterators so have to keep track of what an internal iterator
+        # returned last time we called it.
         self.lastNextValues = []
-        self.axes = []
         for i in range(len(ranges)):
             t = ranges[i]
             # zip here is doing a transpose of the tuple.
             # https://gist.github.com/CMCDragonkai/0cd2cc8c0aa7fd5eeec3955052dfd344
             tt = tuple(zip(*t))
             a = twit_single_axis_discrete(tt)
-            self.axes.append(a)
             i = iter(a)
             self.iterators.append(i)
             self.lastNextValues.append(None)
@@ -470,6 +457,7 @@ class twit:
 
 
     def __next__(self):
+        # Step backward down the iterators array.
         for i in range(len(self.iterators) - 1, -1, -1):
             threw = False
             hit = False
@@ -483,7 +471,6 @@ class twit:
             self.iterators[i].reset()
             self.lastNextValues[i] = None
         if hit == False:
-            self.AtEnd = True
             raise StopIteration()
 
         cv = self.make_current_value_tuples()
@@ -500,9 +487,10 @@ class twit:
 def match_tensor_shape_lengths(t1, t2):
     """
     Ensure t1 and t2 have the same count of axes with the largest count of axes 
-    as the desired size.  If t1 or t2 is shorter in axis count, add new axes of dimension 1.
+    as the desired size.  If t1 or t2 is shorter in axis count, add new axes of dimension 1 to the
+    left of the shape.
     Returns the correctly sized two tensors.  Will make a view if not correct. Else uses the passed in 
-    t1 and t2 ans the return vlaues (t1, t2).
+    t1 and t2 ans the return vlaues (t1, t2). See twit_test.py
 
     This is used to get two tensor shapes able to be used by twit with the same number of axes each.
     """
@@ -523,22 +511,21 @@ def match_tensor_shape_lengths(t1, t2):
 
 def make_twit_cache(twt: twit):
     assert(isinstance(twt, twit))
-    cache = []
-    for t in twt:
-        cache.append(t)
-    return cache
+    return list(twt)
 
 
-def apply_twit(t1, t2, twt: twit = None, cache: list = None, preclear: bool = True):
+def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     """
     Apply the twit transfer from t1 to t2.  Makes view if needed to get shapes compatible.
-    preclear True will zero out t2 in the possibly sub region of the twit destination. 
+    preclear True will zero out t2 in the region of the twit will generate indicies in t2. 
     One of twt or cache must be valid but not both.
     """
     if twt is not None:
+        if cache is not None:
+            raise AttributeError("apply_twit: One of twt or cache MUST be valid, and only one, not both.")
         cache = make_twit_cache(twt)
     elif cache is None:
-        raise AttributeError("one of twt or cache MUST be valid.")
+        raise AttributeError("apply_twit: One of twt or cache MUST be valid.")
 
     t1, t2 = match_tensor_shape_lengths(t1, t2)
     if preclear:
@@ -553,6 +540,7 @@ def apply_twit(t1, t2, twt: twit = None, cache: list = None, preclear: bool = Tr
 
 if __name__ == '__main__':
     # See twit_test.py for unit tests.
+    print("twit.py __main__ does nothing. See twit_test.py for unit tests.")
     pass
 
 

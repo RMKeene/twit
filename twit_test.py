@@ -17,6 +17,7 @@ class TestTwit(unittest.TestCase):
         self.assertAlmostEqual(twit_interp((0, 10), (0.0, 5.0), 0), 0.0)
         self.assertAlmostEqual(twit_interp((0, 10), (0.0, 5.0), 11), 5.5)
         self.assertAlmostEqual(twit_interp((10, 0), (0.0, 5.0), 1), 4.5)
+
         self.assertAlmostEqual(twit_interp((10, 0), (5.0, 0.0), 10), 5.0)
         self.assertAlmostEqual(twit_interp((10, 0), (5.0, 0.0), 1), 0.5)
         self.assertAlmostEqual(twit_interp((0, 0), (1.0, 5.0), 11), 1.0)
@@ -363,6 +364,10 @@ class TestTwit(unittest.TestCase):
         npt.assert_array_almost_equal(t2, a)
         apply_twit(t1, t2, cache=c, preclear=True)
         npt.assert_array_almost_equal(t2, a)
+        # You can't have both cache and twt given. 
+        with self.assertRaises(AttributeError):
+            apply_twit(t1, t2, cache=c, twt=t, preclear=True)
+
         pass
 
  
