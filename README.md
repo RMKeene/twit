@@ -1,6 +1,8 @@
 # TWIT - Tensor Weighted Interpolative Transfer
 
 Richard Keene September 2, 2019
+python PtPI package https://pypi.org/project/twit-rkeene/
+Python 3 only.
 
 # Concept of TWIT
 The purpose of TWIT is to allow transfer of values from a source tensor to a destination tensor
@@ -88,4 +90,7 @@ A little helper function if you need it, match_tensor_shape_lengths, will make t
 There is a twit_test.py file with all the unit tests.
 
 # Examples
-There is a image_scale.py test file for an example.  It is not very generic.
+There is a image_scale.py test file for an example.  It is not very generic. (Not yet done.)
+
+# Source GitHub
+At https://github.com/RMKeene/twit is the project.  Any improvements or bug fixes will be appreciated.
