@@ -1,0 +1,11 @@
+Remember to bump the revision each time.
+
+k:\Cognate\trunk\Cognate\Cognate\CogEnv\Scripts\activate
+
+python setup.py sdist bdist_wheel
+
+python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/twit-0.0.5*
+
+python -m twine upload --repository-url https://upload.pypi.org/legacy/ dist/twit-0.0.5*
+
+pip3 install --upgrade twit
