@@ -23,6 +23,26 @@ class TestTwit(unittest.TestCase):
         self.assertAlmostEqual(twit_interp((0, 0), (1.0, 5.0), 11), 1.0)
         pass
 
+
+    def test_AAA_match_shape_lengths(self):
+        self.assertAlmostEqual(match_shape_lengths((4,2), (3,5)), ((4,2), (3,5)))
+        self.assertAlmostEqual(match_shape_lengths((7, 4, 2), (3, 5)), ((7, 4, 2), (1, 3, 5)))
+        self.assertAlmostEqual(match_shape_lengths((4, 2), (9, 3, 5)), ((1, 4, 2), (9, 3, 5)))
+        self.assertAlmostEqual(match_shape_lengths((2,), (9, 3, 5)), ((1, 1, 2), (9, 3, 5)))
+        pass
+
+
+    def test_AAB_gen_twit_param_from_shapes(self):
+        p = gen_twit_param_from_shapes((3,4), (3,4))
+        npt.assert_array_almost_equal(p, (((0, 2), (0, 2), (1.0, 1.0)), ((0, 3), (0, 3), (1.0, 1.0))))
+        p = gen_twit_param(np.zeros((3,4)), np.zeros((3,4)))
+        npt.assert_array_almost_equal(p, (((0, 2), (0, 2), (1.0, 1.0)), ((0, 3), (0, 3), (1.0, 1.0))))
+        
+        p = gen_twit_param_from_shapes((3,4), (7,3,4))
+        npt.assert_array_almost_equal(p, (((0, 0), (0, 6), (1.0, 1.0)),((0, 2), (0, 2), (1.0, 1.0)), ((0, 3), (0, 3), (1.0, 1.0))))
+        pass
+
+
     def test_BB_parse_prims(self):
         a = split_strip(",,", sep=',')
         self.assertEqual(a, [])
@@ -183,24 +203,6 @@ class TestTwit(unittest.TestCase):
             if skip_asserts:
                 print(r)
             else:
-                self.assertAlmostEqual(expected[N], r)
-            N += 1
-        if not skip_asserts:
-            nt.assert_equal(N, len(expected))
-
-        pass
-
-
-    def series_exec_twit(self, title: str, ranges: Tuple, expected: Tuple, skip_asserts: bool=False):
-        print()
-        print(title)
-        if skip_asserts:
-            print("SKIP ASSERTS - NO TEST DONE")
-        N = 0
-        a = twit(ranges)
-        for r in a:
-            print(r)
-            if not skip_asserts:
                 self.assertAlmostEqual(expected[N], r)
             N += 1
         if not skip_asserts:
@@ -385,17 +387,74 @@ class TestTwit(unittest.TestCase):
         t1 = np.ones((5, 4, 3))
         t1[3, 2, 1] = 0.5
         t2 = np.ones((3, 5, 1))
-        # Reverse outermos axis of source
+        # Reverse outermost axis of source
         t = twit(([(3,1), (0,2), (0.9, 0.5)], [(2, 3), (0,1), (1.0, 1.0)], [(0,2), (0,0), (1.0, 1.0)]))
         c = make_twit_cache(t)
         apply_twit(t1, t2, cache=c, preclear=True)
         npt.assert_array_almost_equal(t2, a)
         apply_twit(t1, t2, cache=c, preclear=True)
         npt.assert_array_almost_equal(t2, a)
-        # You can't have both cache and twt given. 
+        # You can't have both cache and twt given.
         with self.assertRaises(AttributeError):
             apply_twit(t1, t2, cache=c, twt=t, preclear=True)
 
+        # And now the big overall test.
+        t1 = np.ones((5, 4, 3))
+        t1[3, 2, 1] = 0.5
+        t2 = np.ones((3, 5, 1))
+        tensor_transfer(t1, t2, preclear=True)
+        a = [[[1.], [1.], [1.], [1.], [1.]],
+                [[1.], [1.], [0.97685185], [0.97115385], [1.]],
+                [[1.], [1.], [0.9691358], [0.96153846], [1.]]]
+        npt.assert_array_almost_equal(t2, a)
+        t2 = np.ones((3, 5, 1))
+        tensor_transfer(t1, t2, preclear=False)
+        a = [[[2.], [2.], [2.], [2.], [2.]],
+            [[2.], [2.], [1.97685185], [1.97115385], [2.]],
+            [[2.], [2.], [1.9691358], [1.96153846], [2.]]]
+        npt.assert_array_almost_equal(t2, a)
+        t2 = np.ones((3, 5, 1))
+        tensor_transfer(t1, t2, preclear=True, weight_axis=1, weight_range=(0.0, 1.0))
+        a = [[[0.], [0.25], [0.5], [0.75], [1.]],
+            [[0.], [0.25], [0.48842593], [0.72836538], [1.]],
+            [[0.], [0.25], [0.4845679], [0.72115385], [1.]]]
+        npt.assert_array_almost_equal(t2, a)
+        
+        t1 = np.ones((5, 4))
+        t1[3, 2] = 0.5
+        t2 = np.ones((3, 5, 2))
+        tensor_transfer(t1, t2, preclear=True, weight_axis=1, weight_range=(0.0, 1.0))
+        a = [[[0., 0.], [0.25  , 0.25], [0.5, 0.5], [0.6875, 0.625], [1., 1.]],
+           [[0., 0.], [0.25  , 0.25], [0.5, 0.5], [0.6875, 0.625], [1., 1.]],
+           [[0., 0.], [0.25  , 0.25], [0.5, 0.5], [0.6875, 0.625], [1., 1.]]]
+        npt.assert_array_almost_equal(t2, a)
+        
+        t1 = np.ones((5, 4))
+        t1[3, 2] = 0.5
+        t2 = np.ones((3))
+        tensor_transfer(t1, t2, preclear=True, weight_axis=1, weight_range=(0.0, 1.0))
+        a = [0.08333333, 0.46666667, 0.9]
+        npt.assert_array_almost_equal(t2, a)
+
+        t1 = np.ones((5, 4))
+        t1[3, 2] = 0.5
+        t2 = np.zeros((1,))
+        tensor_transfer(t1, t2, preclear=True)
+        # Lol, simply the average value of t1. t1 is 19 ones, and a single 0.5
+        # so 19.5/20 is 0.975
+        a = [0.975]
+        npt.assert_array_almost_equal(t2, a)
+
+        with self.assertRaises(AttributeError): 
+            t1 = np.ones((5, 4))
+            t1[3, 2] = 0.5
+            # Zero length shape here raises assert.
+            t2 = np.zeros(())
+            tensor_transfer(t1, t2, preclear=True)
+            # Lol, simply the average value of t1. t1 is 19 ones, and a single 0.5
+            # so 19.5/20 is 0.975
+            a = [0.975]
+            npt.assert_array_almost_equal(t2, a)
         pass
 
  

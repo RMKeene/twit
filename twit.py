@@ -29,6 +29,7 @@ connections between concept maps. Also lets one do image scale and crop on tenso
 without having to resort to PIL scale etc. and conversion back and forth.
 """
 
+import sys
 import numpy as np
 from collections import defaultdict
 
@@ -232,7 +233,10 @@ def find_range_series_multipliers(narrow_range, wide_range, narrow_idx):
     Make a tuple of pairs of (idx, weight) that is the connections from the narrow
     to the wide for narrow idx 1 in an interplative fashion across integer indicies.
     Return enties are not guaranteed to be in any particular order.
-    Return weights
+    Return weights are float and sum to 1.0 and are fractional parts of the link from source to destination.
+    Higher levels of code apply your specified weights passed to twit(...)
+
+    This method is where all the hard algorithm work gets done. Here there be dragons.
     """
     if narrow_range is None or wide_range is None:
         raise Exception("find_range_series_multipliers: wide and/or narrow range is None.")
@@ -490,7 +494,7 @@ def match_tensor_shape_lengths(t1, t2):
     as the desired size.  If t1 or t2 is shorter in axis count, add new axes of dimension 1 to the
     left of the shape.
     Returns the correctly sized two tensors.  Will make a view if not correct. Else uses the passed in 
-    t1 and t2 ans the return vlaues (t1, t2). See twit_test.py
+    t1 and t2 as the return vlaues (t1, t2). See twit_test.py
 
     This is used to get two tensor shapes able to be used by twit with the same number of axes each.
     """
@@ -507,6 +511,24 @@ def match_tensor_shape_lengths(t1, t2):
             t2s = (1,) + t2s
         t2 = np.reshape(t2, t2s)
     return (t1, t2)
+
+
+def match_shape_lengths(s1, s2):
+    """
+    Ensure s1 and s2 have the same count of axes with the largest count of axes 
+    as the desired size.  If s1 or s2 is shorter in axis count, add new axes of dimension 1 to the
+    left of the shape.
+    Returns the correctly sized two shapes. See twit_test.py
+
+    This is used to get two tensor shapes able to be used by twit with the same number of axes each.
+    """
+    if len(s2) == 0:
+        raise AttributeError("Tensor destination shape can not be length 0, nowhere to put the results!")
+    while len(s1) < len(s2):
+        s1 = (1,) + s1
+    while len(s2) < len(s1):
+        s2 = (1,) + s2
+    return (s1, s2)
 
 
 def make_twit_cache(twt: twit):
@@ -538,9 +560,61 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     pass
 
 
+def gen_twit_param_from_shapes(sh1, sh2, weight_axis: int = -1, weight_range: tuple = (1.0, 1.0)):
+    """
+    Given two tensor shapes, generate the twit specification tuple to transfer all of t1 to t2.
+    Assumes all weights are 1.0.  Can override one axis of weights.
+    """
+    sh1, sh2 = match_shape_lengths(sh1, sh2)
+    ret = ()
+    for i in range(len(sh1)):
+        if i == weight_axis:
+            ret = ret + (((0, sh1[i] - 1), (0, sh2[i] - 1), weight_range),)
+        else:
+            ret = ret + (((0, sh1[i] - 1), (0, sh2[i] - 1), (1.0, 1.0)),)
+    return ret
+
+
+def gen_twit_param(t1, t2, weight_axis: int = -1, weight_range: tuple = (1.0, 1.0)):
+    """ 
+    Generate and return the twit specification tuples that will 
+    transfer all of t1 to t2 along all axes with weight 1.0.
+    See twit_test.py
+    Note that shape lengths are left inclusive, so shape 3 is indices 0,1,2 but
+    twit convention is inclusive so the range (0,3) is 0,1,2,3.  Don't get confused.
+    Save lots of mistakes by using twit.py as as an index generatore like
+
+    python twit.py (4,6,3) (7,8)  and it will generate the params.
+    """
+    return gen_twit_param_from_shapes(t1.shape, t2.shape, weight_axis=weight_axis, weight_range=weight_range)
+
+
+def tensor_transfer(t1, t2, preclear: bool, weight_axis: int = -1, weight_range: tuple = (1.0, 1.0)):
+    """
+    Transfer all of t1 to t2 using the twit iterator and algorithm. Assumes weights are all 1.0
+    Can override one axis of weights.  Lets one do easy fades and such.
+    """
+    p = gen_twit_param(t1, t2, weight_axis=weight_axis, weight_range=weight_range)
+    twt = twit(p)
+    apply_twit(t1, t2, preclear=preclear, twt=twt)
+    pass
+
+
 if __name__ == '__main__':
-    # See twit_test.py for unit tests.
-    print("twit.py __main__ does nothing. See twit_test.py for unit tests.")
+    if len(sys.argv) != 3:
+        print("twit paremeter generation is:")
+        print("    python twit.py (source tensor shape) (destination tensor shape)")
+        print("Like:")
+        print("    python twit.py (5,6) (7,8,9)")
+        print("will print out:")
+        print("(((0, 0), (0, 6), (1.0, 1.0)), ((0, 4), (0, 7), (1.0, 1.0)), ((0, 5), (0, 8), (1.0, 1.0)))")
+
+    a1 = split_strip(sys.argv[1].replace("(", "").replace(")", ""), sep=',')
+    a2 = split_strip(sys.argv[2].replace("(", "").replace(")", ""), sep=',')
+    a1n = map(int, a1)
+    a2n = map(int, a2)
+    p = gen_twit_param_from_shapes(tuple(a1n), tuple(a2n))
+    print(p)
     pass
 
 

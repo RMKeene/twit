@@ -9,12 +9,12 @@ The purpose of TWIT is to allow transfer of values from a source tensor to a des
 with correct interpolation of values.  The source and destination do not have to have the same number of dimensions, 
 e.g. len(src.shape) != len(dst.shape).
 Also the range of indices do not have to match in count.  For example given two one dimensional tensors (vectors of values)
-on could say copy from source range (2,7) to destination range (0,2) and use source to destination multipliers of (0.5, 0.9).  This will
-copy source values at indicies 2,3,4,5,6,7 to destination indicies 0,1,2 (obviously 'scale' the data) and multiply 
-source[2] by 0.5 to go to destination[0] and interpolate the multipler (weight) up to 0.9 for subsequent indicies.
+one could say copy from source range (2,7) to destination range (0,2) and use source to destination multipliers of (0.5, 0.9).  This will
+copy source values at indices 2,3,4,5,6,7 to destination indices 0,1,2 (obviously 'scale' the data) and multiply 
+source[2] by 0.5 to go to destination[0] and interpolate the multiplier (weight) up to 0.9 for subsequent indices.
 
 ### Energy Conservation
-In the above example of scaling down the nieve approach would just sum in the source values multiplied by the interpolate
+In the above example of scaling down the naive approach would just sum in the source values multiplied by the interpolate
 weights would result in a destination that is 6/3 or 2x 'brighter' than the source.
 What TWIT does is maintain constant energy or brightness while scaling up or down.
 
@@ -38,7 +38,7 @@ and use the average (r + b + g)/3.0 as the value.
 # Iteration
 Once you have set up a twit, which is an iterator, it will return successive (sourceindex, destinationindex, weight) tuple sets.
 In the image example above one iteration might return
-((50, 67, 1.0), (100, 150, 0.7), (1, 0, 1.0)) I made thos numbers up, but they indicate:
+((50, 67, 1.0), (100, 150, 0.7), (1, 0, 1.0)) I made those numbers up, but they indicate:
 
 destination[67, 150, 0] += source[50, 100, 1] * (1.0 * 0.7 * 1.0)
 
@@ -47,10 +47,10 @@ a destination image stretched tall, and fading dimmer to the right.
 Notice that the image does not have to be range 0 to 255, nor even ranges 0.0 to 1.0 pixels.  It can be any range
 and the ranges only have meaning to your program.
 
-One can also sepcify only a sub range in any dimension.  It does not have to be 0 to N. This will crop and 
+One can also specify only a sub range in any dimension.  It does not have to be 0 to N. This will crop and 
 scale to the destination cropped area.
 
-Sidenote: The old fashioned way to the above is to use PIL and make an image from the source, scale it, do the fade,
+Side note: The old fashioned way to the above is to use PIL and make an image from the source, scale it, do the fade,
 then convert back to a tensor.  Ugly solution.
 
 # Reuse of twit results
@@ -69,8 +69,8 @@ Input s is like "{5,17} <2,3> [-0.1, 0.9]" (see doc string for the module)
 Format is ((srcstart, srcend), (dststart, dstend), (weightstart, weightend)).
 src, dst, etc are to determine the ranges. The ..._shape_idx are which dimension of the array to use
 for defaults.
-Both indicies and weights can be revered to indicate a reversed interpolation along that axis.
-Indexes are incluse "start value to end value", so {5, 9} means 5,6,7,8,9. 
+Both indices and weights can be revered to indicate a reversed interpolation along that axis.
+Indexes are inclusive "start value to end value", so {5, 9} means 5,6,7,8,9. 
 This is in support of editors for people to easily enter ranges and weights for neural nets.
 (See Cognate and NuTank)
 
@@ -78,13 +78,31 @@ This is in support of editors for people to easily enter ranges and weights for 
 TWIT includes some static functions to help do things.
 
 apply_twit(twt, t1, t2) will iterate the twit twt and do the copy and multiplies from t1 to t2.  If t1 and t2 are not the
-same numbe rof dimensions it will vreate the appropriate view and then do the work.  Tyhere is a clear destination flag to 
+same number of dimensions it will create the appropriate view and then do the work.  There is a clear destination flag to 
 zero out the destination before iteration.  t2 MUST be a array style tensor since it gets written to in-place. You can pass
 in an optional twit cache.
+
+tensor_transfer(t1, t2) builds the twit iterator to map all of t1 to t2 with 1.0 weight on all axes and then does the transfer
 
 make_twit_cache(twt) Simply fills a list with the triples from the twit iterator.
 
 A little helper function if you need it, match_tensor_shape_lengths, will make the views and return them given a t1 and t2.
+
+# Command Line Arguments to twit.py
+As a helper one can run    python twit <source shape> <destination shape> and it will print out the 
+params for those source and estination shapes with weight 1.0.  This helps prevent mistakes in 
+parameter count and order when developing with twit. For example:
+
+python twit (5,6) (7,8,9)
+
+and it prints
+
+(((0, 0), (0, 6), (1.0, 1.0)), ((0, 4), (0, 7), (1.0, 1.0)), ((0, 5), (0, 8), (1.0, 1.0)))
+
+Note that you must not have spaces between the numbers and commas.  The paranthises are optional.
+
+Note that the source range is two elements in the shape and the destination is three.  The source gets
+a 1, appended to the front so the shapes used are (1,5,6) (7,8,9)  thus that (0,0) on the front of the tuples.
 
 # Tests
 There is a twit_test.py file with all the unit tests.
