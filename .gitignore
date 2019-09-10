@@ -104,3 +104,4 @@ venv.bak/
 .mypy_cache/
 /.vs/twit/v16/.suo
 /.vs
+/*.sln

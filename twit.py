@@ -395,6 +395,10 @@ class twit_single_axis_discrete:
         self._generate_value_cache()
 
 
+    def permutations(self):
+        return len(self.value_cache)
+
+
 class twit:
     """
     A Tensor Weighted Interpolative Transfer iterator multi dimensional. See top of this twit.py file.
@@ -420,6 +424,8 @@ class twit:
             assert(len(i) == 3)
 
         self.ranges = ranges
+        self.rank = len(ranges)
+        self.permutations = 1
         # The iterators and axes are in the same order as python axis
         # so innermost (x) most rapidly changing last.
         self.iterators = []
@@ -432,6 +438,8 @@ class twit:
             # https://gist.github.com/CMCDragonkai/0cd2cc8c0aa7fd5eeec3955052dfd344
             tt = tuple(zip(*t))
             a = twit_single_axis_discrete(tt)
+            a.reset()
+            self.permutations *= a.permutations()
             i = iter(a)
             self.iterators.append(i)
             self.lastNextValues.append(None)
@@ -532,8 +540,28 @@ def match_shape_lengths(s1, s2):
 
 
 def make_twit_cache(twt: twit):
+    """
+    Make all iterations of twt into a series of 1D lists.
+    There will be triples of lists being src,idx, dstidx, weight all as three np arrays
+    in a tuple.
+    """
     assert(isinstance(twt, twit))
-    return list(twt)
+    # Outer dimension is src and destination
+    # Middle dim is permutations
+    # Inner dimensions is one idex for each axis of src and dest.
+    axis_count = len(twt.ranges)
+    srcidxs = np.zeros((axis_count, twt.permutations), dtype=np.int)
+    dstidxs = np.zeros((axis_count, twt.permutations), dtype=np.int)
+    weights = np.zeros((axis_count, twt.permutations), dtype=np.float)
+
+    for i, a in enumerate(twt):
+        if i % 50000 == 0:
+            print("gen: %d of %d" % (i, twt.permutations))
+        for ax in range(axis_count):
+            srcidxs[ax, i] = a[ax][0]
+            dstidxs[ax, i] = a[ax][1]
+            weights[ax, i] = a[ax][2]
+    return srcidxs, dstidxs, weights
 
 
 def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
@@ -545,18 +573,39 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     if twt is not None:
         if cache is not None:
             raise AttributeError("apply_twit: One of twt or cache MUST be valid, and only one, not both.")
-        cache = make_twit_cache(twt)
+        srcidxs, dstidxs, weights = make_twit_cache(twt)
+        cache = (srcidxs, dstidxs, weights)
+        rank = twt.rank
+        permutations = twt.permutations
     elif cache is None:
         raise AttributeError("apply_twit: One of twt or cache MUST be valid.")
+    else:
+        srcidxs, dstidxs, weights = cache[0], cache[1], cache[2]
+        rank = len(dstidxs)
+        permutations = len(srcidxs[0])
 
     t1, t2 = match_tensor_shape_lengths(t1, t2)
-    if preclear:
-        for t in cache:
-            z = list(zip(*t))
-            t2[z[1]] = 0.0
-    for t in cache:
-        z = list(zip(*t))
-        t2[z[1]] += t1[z[0]] * np.prod(z[2])
+    if rank == 1:
+        if preclear:
+            t2[dstidxs[0]] = 0.0
+        for i in range(permutations):
+            t2[dstidxs[0][i]] += t1[srcidxs[0, i]] * nweights[:, i][0]
+    elif rank == 2:
+        if preclear:
+            t2[dstidxs[0], dstidxs[1]] = 0.0
+        for i in range(permutations):
+            t2[dstidxs[0][i], dstidxs[1][i]] += t1[srcidxs[0, i], srcidxs[1, i]] * weights[:, i][0] * weights[:, i][1]
+    elif rank == 3:
+        if preclear:
+            t2[dstidxs[0], dstidxs[1], dstidxs[2]] = 0.0
+        for i in range(permutations):
+            t2[dstidxs[0][i], dstidxs[1][i], dstidxs[2][i]] += t1[srcidxs[0, i], srcidxs[1, i], srcidxs[2, i]] * weights[:, i][0] * weights[:, i][1] * weights[:, i][2]
+        pass
+    elif rank == 4:
+        if preclear:
+            t2[dstidxs[0], dstidxs[1], dstidxs[2], dstidxs[3]] = 0.0
+        for i in range(permutations):
+            t2[dstidxs[i][0], dstidxs[i][1], dstidxs[i][2], dstidxs[i][3]] += t1[srcidxs[i, 0], srcidxs[i, 1], srcidxs[i, 2], srcidxs[i, 3]] * weights[:, i][0] * weights[:, i][1] * weights[:, i][2] * weights[:, i][3]
     pass
 
 
