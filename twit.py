@@ -588,27 +588,27 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     if rank == 1:
         if preclear:
             t2[dstidxs[0]] = 0.0
-        for i in range(permutations):
-            t2[dstidxs[0][i]] += t1[srcidxs[0, i]] * nweights[:, i][0]
+        m = np.multiply(t1[srcidxs[0]], weights)
+        for i in range(len(dstidxs[0])):
+            t2[dstidxs[0,i]] += m[0][i]
     elif rank == 2:
         if preclear:
             t2[dstidxs[0], dstidxs[1]] = 0.0
-        for i in range(permutations):
-            t2[dstidxs[0][i], dstidxs[1][i]] += t1[srcidxs[0, i], srcidxs[1, i]] * weights[:, i][0] * weights[:, i][1]
+        m = np.multiply(t1[srcidxs[0], srcidxs[1]], weights)
+        for i in range(len(dstidxs[0])):
+            t2[dstidxs[0,i], dstidxs[1,i]] += m[0][i] * m[1][i]
     elif rank == 3:
         if preclear:
             t2[dstidxs[0], dstidxs[1], dstidxs[2]] = 0.0
         m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2]], weights)
-        tt = t1[srcidxs[0], srcidxs[1], srcidxs[2]]
-        ttm = tt * m
-        t3 = t2[dstidxs[0], dstidxs[1], dstidxs[2]] + ttm
-        return(t3)
-        pass
+        for i in range(len(dstidxs[0])):
+            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i]] += m[0][i] * m[1][i] * m[2][i]
     elif rank == 4:
         if preclear:
             t2[dstidxs[0], dstidxs[1], dstidxs[2], dstidxs[3]] = 0.0
-        for i in range(permutations):
-            t2[dstidxs[i][0], dstidxs[i][1], dstidxs[i][2], dstidxs[i][3]] += t1[srcidxs[i, 0], srcidxs[i, 1], srcidxs[i, 2], srcidxs[i, 3]] * weights[:, i][0] * weights[:, i][1] * weights[:, i][2] * weights[:, i][3]
+        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2], srcidxs[3]], weights)
+        for i in range(len(dstidxs[0])):
+            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i], dstidxs[3,i]] += m[0][i] * m[1][i] * m[2][i] * m[3][i]
     pass
 
 
