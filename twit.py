@@ -598,8 +598,11 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     elif rank == 3:
         if preclear:
             t2[dstidxs[0], dstidxs[1], dstidxs[2]] = 0.0
-        for i in range(permutations):
-            t2[dstidxs[0][i], dstidxs[1][i], dstidxs[2][i]] += t1[srcidxs[0, i], srcidxs[1, i], srcidxs[2, i]] * weights[:, i][0] * weights[:, i][1] * weights[:, i][2]
+        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2]], weights)
+        tt = t1[srcidxs[0], srcidxs[1], srcidxs[2]]
+        ttm = tt * m
+        t3 = t2[dstidxs[0], dstidxs[1], dstidxs[2]] + ttm
+        return(t3)
         pass
     elif rank == 4:
         if preclear:

@@ -365,7 +365,7 @@ class TestTwit(unittest.TestCase):
         t1[3, 2, 1] = 0.5
         t2 = np.ones((3, 5, 1))
         t = twit(([(1,3), (0,2), (0.9, 0.5)], [(2, 3), (0,1), (1.0, 1.0)], [(0,2), (0,0), (1.0, 1.0)]))
-        apply_twit(t1, t2, twt=t, preclear=True)
+        t2 = apply_twit(t1, t2, twt=t, preclear=True)
         # print(t2)
         a = [[[0.9],[0.9],[1.],[1.],[1.]],
              [[0.7],[0.7],[1.],[1.],[1.]],
