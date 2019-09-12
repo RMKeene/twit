@@ -573,6 +573,7 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
     if twt is not None:
         if cache is not None:
             raise AttributeError("apply_twit: One of twt or cache MUST be valid, and only one, not both.")
+        print("apply_twit: make cache...")
         srcidxs, dstidxs, weights = make_twit_cache(twt)
         cache = (srcidxs, dstidxs, weights)
         rank = twt.rank
@@ -584,31 +585,32 @@ def apply_twit(t1, t2, preclear: bool, twt: twit = None, cache: list = None):
         rank = len(dstidxs)
         permutations = len(srcidxs[0])
 
+    print("apply_twit: do transfer...")
     t1, t2 = match_tensor_shape_lengths(t1, t2)
     if rank == 1:
         if preclear:
             t2[dstidxs[0]] = 0.0
-        m = np.multiply(t1[srcidxs[0]], weights)
+        m = np.multiply(t1[srcidxs[0]], weights[0])
         for i in range(len(dstidxs[0])):
-            t2[dstidxs[0,i]] += m[0][i]
+            t2[dstidxs[0,i]] += m[i]
     elif rank == 2:
         if preclear:
             t2[dstidxs[0], dstidxs[1]] = 0.0
-        m = np.multiply(t1[srcidxs[0], srcidxs[1]], weights)
+        m = np.multiply(t1[srcidxs[0], srcidxs[1]], weights[0] * weights[1])
         for i in range(len(dstidxs[0])):
-            t2[dstidxs[0,i], dstidxs[1,i]] += m[0][i] * m[1][i]
+            t2[dstidxs[0,i], dstidxs[1,i]] += m[i]
     elif rank == 3:
         if preclear:
             t2[dstidxs[0], dstidxs[1], dstidxs[2]] = 0.0
-        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2]], weights)
+        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2]], weights[0] * weights[1] * weights[2])
         for i in range(len(dstidxs[0])):
-            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i]] += m[0][i] * m[1][i] * m[2][i]
+            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i]] += m[i]
     elif rank == 4:
         if preclear:
             t2[dstidxs[0], dstidxs[1], dstidxs[2], dstidxs[3]] = 0.0
-        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2], srcidxs[3]], weights)
+        m = np.multiply(t1[srcidxs[0], srcidxs[1], srcidxs[2], srcidxs[3]], weights[0] * weights[1] * weights[2] * weights[3])
         for i in range(len(dstidxs[0])):
-            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i], dstidxs[3,i]] += m[0][i] * m[1][i] * m[2][i] * m[3][i]
+            t2[dstidxs[0,i], dstidxs[1,i], dstidxs[2,i], dstidxs[3,i]] += m[i]
     pass
 
 
