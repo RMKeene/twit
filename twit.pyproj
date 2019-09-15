@@ -3,15 +3,15 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{5def852d-ffa1-49ad-9eab-d41067d18d67}</ProjectGuid>
-    <ProjectHome />
-    <StartupFile>twitc_test.py</StartupFile>
+    <ProjectGuid>{5fae73ad-5d99-46f0-82d6-22f11a1ee5ff}</ProjectGuid>
+    <ProjectHome>..\</ProjectHome>
+    <StartupFile>twit\twitc_test.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <InterpreterId>MSBuild|ScaleImageTwitEnv|$(MSBuildProjectFullPath)</InterpreterId>
+    <InterpreterId>MSBuild|TwitPyEnv|$(MSBuildProjectFullPath)</InterpreterId>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -19,26 +19,28 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="dog1.jpg" />
-    <Content Include="PackagingCommands.txt" />
+    <Content Include="twit\dog1.jpg" />
+    <Content Include="twit\PackagingCommands.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="scale_image_sample.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="setup.py" />
-    <Compile Include="twitc_test.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="twit.py" />
-    <Compile Include="twit_test.py" />
-    <Compile Include="__init__.py" />
+    <Compile Include="twit\scale_image_sample.py" />
+    <Compile Include="twit\setup.py" />
+    <Compile Include="twit\twit.py" />
+    <Compile Include="twit\twitc_test.py" />
+    <Compile Include="twit\twit_test.py" />
+    <Compile Include="twit\__init__.py" />
   </ItemGroup>
   <ItemGroup>
-    <Interpreter Include="ScaleImageTwitEnv\">
-      <Id>ScaleImageTwitEnv</Id>
+    <Folder Include="twit" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include="TwitPyEnv\">
+      <Id>TwitPyEnv</Id>
       <Version>3.7</Version>
-      <Description>ScaleImageTwitEnv (Python 3.7 (64-bit))</Description>
+      <Description>TwitPyEnv (Python 3.7 (64-bit))</Description>
       <InterpreterPath>Scripts\python.exe</InterpreterPath>
       <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
       <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
@@ -46,7 +48,7 @@
     </Interpreter>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="twitc\twitc.vcxproj">
+    <ProjectReference Include="twit\twitc\twitc.vcxproj">
       <Name>twitc</Name>
       <Project>{94c5e603-0de3-47d7-822a-1edef3ffe8a5}</Project>
       <Private>True</Private>
