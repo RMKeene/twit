@@ -7,12 +7,14 @@
 PyObject* generate_twit_list_impl(PyObject*, PyObject* o);
 PyObject* twitc_interp_impl(PyObject*, PyObject* args);
 PyObject* find_range_series_multipliers(PyObject*, PyObject* args);
+PyObject* outside_range_impl(PyObject*, PyObject* args);
 
 static PyMethodDef twitc_methods[] = {
 
 	{ "generate_twit_list", (PyCFunction)generate_twit_list_impl, METH_O, "Generate the twit list of inter tensor links as a cache." },
 	{ "twit_interp", (PyCFunction)twitc_interp_impl, METH_VARARGS, "Interpolate a float value along an integer range with index." },
 	{ "find_range_series_multipliers", (PyCFunction)find_range_series_multipliers, METH_VARARGS, "Generate two lists of int index and float fractional value used for single axis interpolation calc." },
+	{ "outside_range", (PyCFunction)outside_range_impl, METH_VARARGS, "True if idx is not in the start to end range, inclusive.  Start does not have to be less than end." },
 	{ nullptr, nullptr, 0, nullptr }
 };
 
@@ -44,12 +46,44 @@ struct range_series {
 	double* values;
 };
 
+struct twit_single_axis {
+	INT64 length;
+	INT64* srcidxs;
+	INT64* dstidxs;
+	double* weights;
+};
+
 double _twit_interp(INT64 range_start, INT64 range_end, double value_start, double value_end, INT64 idx) {
 	int rspan = range_end - range_start;
 	if (rspan == 0) {
 		return value_start;
 	}
 	return value_start + (value_end - value_start) * (idx - range_start) / rspan;
+}
+
+bool _outside_range(int start, int end, int idx) {
+	///True if idx is not between start and end inclusive.
+	printf("_outside_range: start %d, end %d, idx %d\n", start, end, idx);
+	if (start <= end) {
+		return idx < start || idx > end;
+	}
+	return idx < end || idx > start;
+}
+
+PyObject* outside_range_impl(PyObject*, PyObject* args) {
+	int start;
+	int end;
+	int idx;
+	PyArg_ParseTuple(args, "iii", &start, &end, &idx);
+
+	bool b = _outside_range(start, end, idx);
+	if (b) {
+		Py_INCREF(Py_True);
+		return Py_True;
+	}
+
+	Py_INCREF(Py_False);
+	return Py_False;
 }
 
 PyObject* twitc_interp_impl(PyObject*, PyObject* args) {
@@ -109,7 +143,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	// Count how many elements so we can allocate idxs and values arrays.
 	INT64 element_count = 0;
 	if (narrow_div > 0) { // Many to Many
-		double narrow_idx_frac_low = max(0.0, (narrow_relidx - 1) / (double) narrow_div);
+		double narrow_idx_frac_low = max(0.0, (narrow_relidx - 1) / (double)narrow_div);
 		double narrow_idx_frac = narrow_relidx / (double)narrow_div;
 		double narrow_idx_frac_hi = min(1.0, (narrow_relidx + 1) / (double)narrow_div);
 
@@ -194,4 +228,8 @@ PyObject* find_range_series_multipliers(PyObject*, PyObject* args) {
 	PyTuple_SetItem(rslt, 1, values);
 	Py_INCREF(rslt);
 	return rslt;
+}
+
+twit_single_axis * compute_twit_single_dimension(INT64 src_start, INT64 src_end, INT64 dst_start, INT64 dst_end, double w_start, double w_end) {
+
 }

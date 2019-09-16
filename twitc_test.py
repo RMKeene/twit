@@ -23,6 +23,22 @@ class TestTwitc(unittest.TestCase):
 
         pass
 
+    def test_AAM_interp(self):
+        self.assertFalse(twitc.outside_range(0, 10, 5))
+        self.assertFalse(twitc.outside_range(0, 10, 10))
+        self.assertFalse(twitc.outside_range(0, 10, 0))
+        self.assertFalse(twitc.outside_range(10, 0, 5))
+        self.assertFalse(twitc.outside_range(10, 0, 10))
+        self.assertFalse(twitc.outside_range(10, 0, 0))
+        self.assertTrue(twitc.outside_range(0, 10, -5))
+        self.assertTrue(twitc.outside_range(0, 10, 11))
+        self.assertTrue(twitc.outside_range(0, 10, -1))
+        self.assertTrue(twitc.outside_range(10, 0, 500))
+        self.assertFalse(twitc.outside_range(10, 0, 3))
+        self.assertFalse(twitc.outside_range(10, 0, 2))
+
+        pass
+
 
     def test_AB_range_series(self):
         t1 = ((3, 4), (0.6666666666666666, 0.3333333333333333))
@@ -79,6 +95,8 @@ class TestTwitc(unittest.TestCase):
             a : tuple = twitc.find_range_series_multipliers(0, 3, 3, -9, 1)
 
         pass
+
+
 if __name__ == '__main__':
 
     unittest.main(verbosity=2)
