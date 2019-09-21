@@ -369,15 +369,12 @@ class twit_single_axis_discrete:
                 for sp in splits:
                     self.value_cache.append([srci, sp[0], sp[1]])
             # Normalize
-            dstsums = defaultdict(float)
             srcsums = defaultdict(float)
             for v in self.value_cache:
-                si = v[0]
-                srcsums[si] = srcsums[si] + v[2]
                 di = v[1]
-                dstsums[di] = dstsums[di] + v[2]
+                srcsums[di] = srcsums[di] + v[2]
             for x in self.value_cache:
-                x[2] = x[2] * twit_interp(self.dst_range, self.weight_range, x[1]) / dstsums[x[1]]
+                x[2] = x[2] * twit_interp(self.dst_range, self.weight_range, x[1]) / srcsums[x[1]]
 
     
     def __iter__(self):

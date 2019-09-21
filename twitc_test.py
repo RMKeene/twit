@@ -46,10 +46,10 @@ class TestTwitc(unittest.TestCase):
         t3 = ((6, 7, 8), (0.25, 0.5, 0.25))
         t4 = ((8, 9), (0.3333333333333333, 0.6666666666666666))
         a : tuple = twitc.find_range_series_multipliers(1, 4, 3, 9, 1)
-        print(a)
+        #print(a)
         nt.assert_almost_equal(a, t1)
         a : tuple = twitc.find_range_series_multipliers(1, 4, 3, 9, 2)
-        print(a)
+        #print(a)
         nt.assert_almost_equal(a, t2)
         a : tuple = twitc.find_range_series_multipliers(1, 4, 3, 9, 3)
         nt.assert_almost_equal(a, t3)
@@ -95,6 +95,33 @@ class TestTwitc(unittest.TestCase):
             a : tuple = twitc.find_range_series_multipliers(0, 3, 3, -9, 1)
 
         pass
+
+
+    def test_EA_single_axis_discrete_interpolation(self):
+        # 1 to 1
+        t = twitc.compute_twit_single_dimension(1, 1, 5, 5, 10.0, 10.0)
+        nt.assert_almost_equal(t, ([1], [5], [10.]))
+        # 1 to 4
+        t = twitc.compute_twit_single_dimension(1, 1, 2, 5, 5.0, 10.0)
+        nt.assert_almost_equal(t, ([1,1,1,1], [2,3,4,5], [5., 6.666666666666667, 8.333333333333334, 10.0]))
+        # 4 to 1
+        t = twitc.compute_twit_single_dimension(2, 5, 1, 1, 5.0, 10.0)
+        nt.assert_almost_equal(t, ([2,3,4,5], [1,1,1,1], [1.25, 1.66666667, 2.08333333, 2.5]))
+        # 1 to 4 reverse W
+        t = twitc.compute_twit_single_dimension(1, 1, 2, 5, 10.0, 5.0)
+        nt.assert_almost_equal(t, ([1,1,1,1], [2,3,4,5], [10.0, 8.333333333333334, 6.666666666666667, 5.]))
+        # 4 to 1 rev W
+        t = twitc.compute_twit_single_dimension(2, 5, 1, 1, 10.0, 5.0)
+        nt.assert_almost_equal(t, ([2,3,4,5], [1,1,1,1], [2.5, 2.08333333, 1.66666667, 1.25]))
+
+        # 3 to 5
+        t = twitc.compute_twit_single_dimension(1, 3, 0, 4, 5.0, 10.0)
+        nt.assert_almost_equal(t, ([1, 1, 2, 2, 2, 3, 3], [0, 1, 1, 2, 3, 3, 4], [5., 3.571428571428571, 2.678571428571429, 7.5, 3.7500000000000004, 5.0, 10.0]))
+        # 5 to 3
+        t = twitc.compute_twit_single_dimension(1, 4, 0, 2, 5.0, 10.0)
+        nt.assert_almost_equal(t, ([1, 2, 2, 3, 3, 4], [0, 0, 1, 1, 2, 2], [3.75, 1.66666667, 3.33333333, 4.16666667, 2.08333333, 7.5]))
+        pass
+
 
 
 if __name__ == '__main__':
