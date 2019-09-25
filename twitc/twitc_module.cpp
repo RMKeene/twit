@@ -316,7 +316,7 @@ twit_single_axis* _compute_twit_single_dimension(INT64 src_start, INT64 src_end,
 			INT64 k = ret->dstidxs[i];
 			ret->weights[i] *= _twit_interp(src_start, src_end, w_start, w_end, ret->srcidxs[i]) / sums[(k - dst_start) * dst_inc];
 		}
-		delete [] sums;
+		delete[] sums;
 
 	}
 	else {
@@ -377,4 +377,13 @@ PyObject* compute_twit_single_dimension_impl(PyObject*, PyObject* args) {
 	Py_INCREF(rslt);
 	return rslt;
 
+}
+
+// Do a twit transfer from t1 to t2 by twit.
+// t1, t2, and twit all have the same number of dimensions, n_dims.
+// t1 is a block of doubles.  t1_dims is first the count of dimensions, then the dimensions, python order so higher dimensions first.
+// t2 and t2_dims the same.  t1 is src, t2 is dst.
+// twit_i is the integer start and ends of ranges in quads, t1_start, t1_end, t2_start, t2_end and then repeating for each dimension 
+// in python order.  twit_w is pairs for dimension weights, w_start, w_end repeating in python order for the dimensions.
+void _apply_twit(INT32 n_dims, double* t1, INT32* t1_dims, double* t2, INT32* t2dims, INT32* twit_i, double* twit_w, INT32 preclear) {
 }

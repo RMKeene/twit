@@ -123,6 +123,9 @@ class TestTwitc(unittest.TestCase):
         pass
 
 
+    def test_FA_multi_axis_interpolation(self):
+        pass
+
 
 if __name__ == '__main__':
 
