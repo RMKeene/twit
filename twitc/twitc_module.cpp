@@ -17,10 +17,24 @@ struct twit_single_axis {
 	double* weights;
 };
 
+struct twit_multi_axis {
+	INT64 length;
+	twit_single_axis** axs;
+};
+
 // Must match the python code values.
 const int TWIT_FAN_SAME = 0;
 const int TWIT_FAN_IN = 1;
 const int TWIT_FAN_OUT = 2;
+
+inline INT64 twit_sign(INT64 x);
+double _twit_interp(INT64 range_start, INT64 range_end, double value_start, double value_end, INT64 idx);
+bool _outside_range(INT64 start, INT64 end, INT64 idx);
+range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 narrow_range_end, INT64 wide_range_start, INT64 wide_range_end, INT64 narrow_idx);
+twit_single_axis* _compute_twit_single_dimension(INT64 src_start, INT64 src_end, INT64 dst_start, INT64 dst_end, double w_start, double w_end);
+twit_multi_axis* _compute_twit_multi_dimension(INT32 n_dims, INT32* twit_i, double* twit_w);
+void _apply_twit(twit_multi_axis* twit, double* t1, double* t2, INT32 preclear);
+void _make_and_apply_twit(INT32 n_dims, double* t1, INT32* t1_dims, double* t2, INT32* t2dims, INT32* twit_i, double* twit_w, INT32 preclear);
 
 
 PyObject* generate_twit_list_impl(PyObject*, PyObject* o);
@@ -61,20 +75,20 @@ PyObject* generate_twit_list_impl(PyObject*, PyObject* o) {
 	return (ret);
 }
 
+/// Returns either +1 or -1, if x is 0 then returns +1
+inline INT64 twit_sign(INT64 x) {
+	return (x >= 0) - (x < 0);
+}
+
 double _twit_interp(INT64 range_start, INT64 range_end, double value_start, double value_end, INT64 idx) {
-	int rspan = range_end - range_start;
+	INT64 rspan = range_end - range_start;
 	if (rspan == 0) {
 		return value_start;
 	}
 	return value_start + (value_end - value_start) * (idx - range_start) / rspan;
 }
 
-/// Returns either +1 or -1, if x is 0 then returns +1
-inline int twit_sign(int x) {
-	return (x >= 0) - (x < 0);
-}
-
-bool _outside_range(int start, int end, int idx) {
+bool _outside_range(INT64 start, INT64 end, INT64 idx) {
 	///True if idx is not between start and end inclusive.
 	//printf("_outside_range: start %d, end %d, idx %d\n", start, end, idx);
 	if (start <= end) {
@@ -84,10 +98,10 @@ bool _outside_range(int start, int end, int idx) {
 }
 
 PyObject* outside_range_impl(PyObject*, PyObject* args) {
-	int start;
-	int end;
-	int idx;
-	PyArg_ParseTuple(args, "iii", &start, &end, &idx);
+	INT64 start;
+	INT64 end;
+	INT64 idx;
+	PyArg_ParseTuple(args, "LLL", &start, &end, &idx);
 
 	bool b = _outside_range(start, end, idx);
 	if (b) {
@@ -120,12 +134,12 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	// Force narrow and wide ranges to be in order.At this low level it does
 	// not matter which order we sequence the return values.
 	if (narrow_range_start > narrow_range_end) {
-		int t = narrow_range_start;
+		INT64 t = narrow_range_start;
 		narrow_range_start = narrow_range_end;
 		narrow_range_end = t;
 	}
 	if (wide_range_start > wide_range_end) {
-		int t = wide_range_start;
+		INT64 t = wide_range_start;
 		wide_range_start = wide_range_end;
 		wide_range_end = t;
 	}
@@ -142,7 +156,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 		PyErr_SetString(PyExc_Exception, "find_range_series_multipliers: Wide range must be wider than narrow_range.");
 		return NULL;
 	}
-	int wspan = wide_span - 1;
+	INT64 wspan = wide_span - 1;
 
 	// Generate the fractional values.
 	range_series* ret = (range_series*)malloc(sizeof(range_series));
@@ -379,11 +393,43 @@ PyObject* compute_twit_single_dimension_impl(PyObject*, PyObject* args) {
 
 }
 
+// n_dims is the number of dimensions in the source and destination arrays.  They have to be the same count of dimensions each.
+// Possibly some higher dimensions are size 1.
+// twit_i is the integer start and ends of ranges in quads, t1_start, t1_end, t2_start, t2_end and then repeating for each dimension 
+// in python order.  twit_w is pairs for dimension weights, w_start, w_end repeating in python order for the dimensions.
+
+twit_multi_axis * _compute_twit_multi_dimension(INT32 n_dims, INT32* twit_i, double* twit_w) {
+	// Generate axis series'
+	twit_multi_axis* axs = new twit_multi_axis;
+	axs->length = n_dims;
+	axs->axs = (twit_single_axis * *)PyMem_Malloc(n_dims * sizeof(twit_single_axis*));
+
+	for (int i = 0; i < n_dims; i++) {
+		// This points to t1_start, t1_end, t2_start, t2_end
+		INT32* twit_ii = twit_i + i * 4;
+		// This points to w_start, w_end
+		double* twit_wi = twit_w + i * 2;
+		axs->axs[i] = _compute_twit_single_dimension(twit_ii[0], twit_ii[1], twit_ii[2], twit_ii[3], twit_wi[0], twit_wi[1]);
+	}
+
+	return(axs);
+}
+
 // Do a twit transfer from t1 to t2 by twit.
 // t1, t2, and twit all have the same number of dimensions, n_dims.
+// t1_dims and t2_dims are how long the diemsions are.
 // t1 is a block of doubles.  t1_dims is first the count of dimensions, then the dimensions, python order so higher dimensions first.
 // t2 and t2_dims the same.  t1 is src, t2 is dst.
 // twit_i is the integer start and ends of ranges in quads, t1_start, t1_end, t2_start, t2_end and then repeating for each dimension 
 // in python order.  twit_w is pairs for dimension weights, w_start, w_end repeating in python order for the dimensions.
-void _apply_twit(INT32 n_dims, double* t1, INT32* t1_dims, double* t2, INT32* t2dims, INT32* twit_i, double* twit_w, INT32 preclear) {
+void _make_and_apply_twit(INT32 n_dims, double* t1, INT32* t1_dims, double* t2, INT32* t2dims, INT32* twit_i, double* twit_w, INT32 preclear) {
+	// Generate axis series'
+	twit_multi_axis* axs = _compute_twit_multi_dimension(n_dims, twit_i, twit_w);
+
+	// Apply from t1 to t2
+	_apply_twit(axs, t1, t2, preclear);
+}
+
+void _apply_twit(twit_multi_axis * twit, double* t1, double* t2, INT32 preclear) {
+
 }
