@@ -97,7 +97,7 @@ class TestTwitc(unittest.TestCase):
         pass
 
 
-    def test_EA_single_axis_discrete_interpolation(self):
+    def test_EA_compute_twit_single_dimension(self):
         # 1 to 1
         t = twitc.compute_twit_single_dimension(1, 1, 5, 5, 10.0, 10.0)
         nt.assert_almost_equal(t, ([1], [5], [10.]))
@@ -120,8 +120,23 @@ class TestTwitc(unittest.TestCase):
         # 5 to 3
         t = twitc.compute_twit_single_dimension(1, 4, 0, 2, 5.0, 10.0)
         nt.assert_almost_equal(t, ([1, 2, 2, 3, 3, 4], [0, 0, 1, 1, 2, 2], [3.75, 1.66666667, 3.33333333, 4.16666667, 2.08333333, 7.5]))
+        # 5 to 2
+        t = twitc.compute_twit_single_dimension(0, 4, 0, 1, 1.0, 1.0)
+        nt.assert_almost_equal(t, ([0, 1, 2, 3, 1, 2, 3, 4], [0, 0, 0, 0, 1, 1, 1, 1], [0.4, 0.3, 0.2, 0.1, 0.1, 0.2, 0.3, 0.4]))
         pass
 
+    def test_FA_compute_twit_multi_dimension(self):
+        t = twitc.compute_twit_multi_dimension(2, np.array([0, 3, 0, 4, 0, 4, 0, 1], dtype=np.int64), np.array([0.0, 1.0, 1.0, 1.0], dtype=np.double))
+        self.assertEqual(2, t[0])
+        self.assertEqual(8, t[1][0])
+        self.assertEqual(8, t[2][0])
+        nt.assert_array_almost_equal(t[1][1], [0, 0, 1, 1, 2, 2, 3, 3])
+        nt.assert_array_almost_equal(t[1][2], [0, 1, 1, 2, 2, 3, 3, 4])
+        nt.assert_array_almost_equal(t[1][3], [0.0, 0.0625, 0.1875, 0.25, 0.25, 0.5625, 0.1875, 1.0])
+        nt.assert_array_almost_equal(t[2][1], [0, 1, 2, 3, 1, 2, 3, 4])
+        nt.assert_array_almost_equal(t[2][2], [0, 0, 0, 0, 1, 1, 1, 1])
+        nt.assert_array_almost_equal(t[2][3], [0.4, 0.3, 0.2, 0.1, 0.1, 0.2, 0.3, 0.4])
+        pass
 
     def test_FA_multi_axis_interpolation(self):
         pass
