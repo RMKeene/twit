@@ -128,7 +128,6 @@ class TestTwitc(unittest.TestCase):
     def test_FA_compute_twit_multi_dimension(self):
         t = twitc.compute_twit_multi_dimension(2, np.array([0, 3, 0, 4, 0, 4, 0, 1], dtype=np.int64), np.array([0.0, 1.0, 1.0, 1.0], dtype=np.double))
         t = twitc.unpack_twit_multi_axis(t)
-        return
         self.assertEqual(2, t[0])
         self.assertEqual(8, t[1][0])
         nt.assert_array_almost_equal(t[1][1], [0, 0, 1, 1, 2, 2, 3, 3])
@@ -138,7 +137,7 @@ class TestTwitc(unittest.TestCase):
         nt.assert_array_almost_equal(t[2][1], [0, 1, 2, 3, 1, 2, 3, 4])
         nt.assert_array_almost_equal(t[2][2], [0, 0, 0, 0, 1, 1, 1, 1])
         nt.assert_array_almost_equal(t[2][3], [0.4, 0.3, 0.2, 0.1, 0.1, 0.2, 0.3, 0.4])
-
+        return;
         ttt = t
         tt = twitc.pack_twit_multi_axis(ttt)
         t = twitc.unpack_twit_multi_axis(tt)

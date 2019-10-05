@@ -38,7 +38,6 @@ void _make_and_apply_twit(INT64 n_dims, double* t1, INT64* t1_dims, double* t2, 
 void twit_multi_axis_destructor(PyObject* obj);
 
 
-PyObject* generate_twit_list_impl(PyObject*, PyObject* o);
 PyObject* twitc_interp_impl(PyObject*, PyObject* args);
 PyObject* find_range_series_multipliers_impl(PyObject*, PyObject* args);
 PyObject* outside_range_impl(PyObject*, PyObject* args);
@@ -51,7 +50,6 @@ PyObject* pack_twit_multi_axis_impl(PyObject*, PyObject* args);
 
 static PyMethodDef twitc_methods[] = {
 
-	{ "generate_twit_list", (PyCFunction)generate_twit_list_impl, METH_O, "Generate the twit list of inter tensor links as a cache." },
 	{ "twit_interp", (PyCFunction)twitc_interp_impl, METH_VARARGS, "Interpolate a float value along an integer range with index." },
 	{ "find_range_series_multipliers", (PyCFunction)find_range_series_multipliers_impl, METH_VARARGS, "Generate two lists of int index and float fractional value used for single axis interpolation calc." },
 	{ "outside_range", (PyCFunction)outside_range_impl, METH_VARARGS, "True if idx is not in the start to end range, inclusive.  Start does not have to be less than end." },
@@ -78,17 +76,34 @@ PyMODINIT_FUNC PyInit_twitc() {
 	return PyModule_Create(&twitc_module);
 }
 
-PyObject* generate_twit_list_impl(PyObject*, PyObject* o) {
-	//rintf("TWITC generate_twit_list_impl\n");
-	PyErr_Clear();
-	double x = PyFloat_AsDouble(o);
-	PyObject* ret = PyFloat_FromDouble(x);
-	return (ret);
-}
-
 /// Returns either +1 or -1, if x is 0 then returns +1
 inline INT64 twit_sign(INT64 x) {
 	return (INT64)(x >= 0l) - (INT64)(x < 0l);
+}
+
+void free_range_series(range_series* p)
+{
+	printf("\nfree_range_series\n");
+	PyMem_Free(p->idxs);
+	PyMem_Free(p->values);
+	PyMem_Free(p);
+}
+
+void free_twit_single_axis(twit_single_axis* p) {
+	printf("\nfree_twit_single_axis\n");
+	PyMem_Free(p->dstidxs);
+	PyMem_Free(p->srcidxs);
+	PyMem_Free(p->weights);
+	PyMem_Free(p);
+}
+
+void free_twit_multi_axis(twit_multi_axis* p) {
+	printf("\nfree_twit_multi_axis\n");
+	for (int i = 0; i < p->length; i++) {
+		free_twit_single_axis(p->axs[i]);
+	}
+	PyMem_Free(p->axs);
+	PyMem_Free(p);
 }
 
 double _twit_interp(INT64 range_start, INT64 range_end, double value_start, double value_end, INT64 idx) {
@@ -170,7 +185,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	INT64 wspan = wide_span - 1;
 
 	// Generate the fractional values.
-	range_series* ret = (range_series*)malloc(sizeof(range_series));
+	range_series* ret = (range_series*)PyMem_Malloc(sizeof(range_series));
 	ret->idxs = NULL;
 	ret->length = 0;
 	ret->values = NULL;
@@ -197,7 +212,6 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 			}
 		}
 
-		// Per C standard malloc aligns to 16 bytes (a double) on 64 bit systems.
 		ret->idxs = (INT64*)PyMem_Malloc(sizeof(INT64) * element_count);
 		ret->values = (double*)PyMem_Malloc(sizeof(double) * element_count);
 		ret->length = element_count;
@@ -216,9 +230,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	else // One to Many
 	{
 		// Count how large the arrays have to be to hold the results.
-		for (INT64 i = (INT64)wide_range_start; i <= (INT64)wide_range_end; i++) {
-			element_count++;
-		}
+		element_count = wide_range_end - wide_range_start + 1;
 
 		ret->idxs = (INT64*)PyMem_Malloc(sizeof(INT64) * element_count);
 		ret->values = (double*)PyMem_Malloc(sizeof(double) * element_count);
@@ -252,19 +264,32 @@ PyObject* find_range_series_multipliers_impl(PyObject*, PyObject* args) {
 	INT64 wide_range_end;
 	INT64 narrow_idx;
 	PyArg_ParseTuple(args, "LLLLL", &narrow_range_start, &narrow_range_end, &wide_range_start, &wide_range_end, &narrow_idx);
+
 	range_series* ptr = _find_range_series_multipliers(narrow_range_start, narrow_range_end, wide_range_start, wide_range_end, narrow_idx);
 	if (ptr == NULL) {
 		return NULL;
 	}
+
+	// Very difficult to get the ownership sematics correct to make the PyArrays and return them without memory corruption.
+	// So I give up, just make the arrays, and copy the data into them, no ownership issues at all. :-(
 	npy_intp dims[1];
 	dims[0] = ptr->length;
-	PyObject* idxs = PyArray_SimpleNewFromData(1, dims, NPY_INT64, (void*)ptr->idxs);
-	PyObject* values = PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE, (void*)ptr->values);
+	PyObject* idxs = PyArray_SimpleNew(1, dims, NPY_INT64);
+	PyObject* values = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+
+	npy_intp pp[] = { 0 };
+	INT64* ip = (INT64*)PyArray_GetPtr((PyArrayObject*)idxs, pp);
+	double* vp = (double*)PyArray_GetPtr((PyArrayObject*)values, pp);
+	for (int i = 0; i < ptr->length; i++) {
+		ip[i] = ptr->idxs[i];
+		vp[i] = ptr->values[i];
+	}
+
+	free_range_series(ptr);
 
 	PyObject* rslt = PyTuple_New(2);
 	PyTuple_SetItem(rslt, 0, idxs);
 	PyTuple_SetItem(rslt, 1, values);
-	Py_INCREF(rslt);
 	return rslt;
 }
 
@@ -334,6 +359,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 				sums[(dsti - dst_start) * dst_inc] += ret->weights[sz];
 				sz++;
 			}
+			free_range_series(splits);
 		}
 
 		// Normalize so each each source sums to 1.0 and also do the interpolation of weights across the span.
@@ -349,7 +375,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 		INT64 dsti = dst_start;
 		sz = 0;
 		// Sums for normalizing, by index in span
-		double* sums = new double[output_span];
+		double* sums = (double*)PyMem_Malloc(sizeof(double) * output_span);
 		for (INT64 i = 0; i < output_span; i++) sums[i] = 0.0;
 
 		for (INT64 srci = src_start; srci != src_end + src_inc; srci += src_inc, dsti += dst_inc) {
@@ -361,6 +387,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 				sums[k * dst_inc - dst_start] += ret->weights[sz];
 				sz++;
 			}
+			free_range_series(splits);
 		}
 
 		// Normalize so each each destination sums to 1.0 and also multiply in the interpolated weights across the weight range.
@@ -368,7 +395,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 			INT64 k = ret->dstidxs[i];
 			ret->weights[i] *= _twit_interp(dst_start, dst_end, w_start, w_end, ret->dstidxs[i]) / sums[k * dst_inc - dst_start];
 		}
-		delete[] sums;
+		PyMem_Free(sums);
 	}
 
 	ret->length = sz;
@@ -391,15 +418,26 @@ PyObject* compute_twit_single_dimension_impl(PyObject*, PyObject* args) {
 
 	npy_intp dims[1];
 	dims[0] = ptr->length;
-	PyObject* srcidxs = PyArray_SimpleNewFromData(1, dims, NPY_INT64, (void*)ptr->srcidxs);
-	PyObject* dstidxs = PyArray_SimpleNewFromData(1, dims, NPY_INT64, (void*)ptr->dstidxs);
-	PyObject* weights = PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE, (void*)ptr->weights);
+	PyObject* srcidxs = PyArray_SimpleNew(1, dims, NPY_INT64);
+	PyObject* dstidxs = PyArray_SimpleNew(1, dims, NPY_INT64);
+	PyObject* weights = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+
+	npy_intp pp[] = { 0 };
+	INT64* sip = (INT64*)PyArray_GetPtr((PyArrayObject*)srcidxs, pp);
+	INT64* dip = (INT64*)PyArray_GetPtr((PyArrayObject*)dstidxs, pp);
+	double* wp = (double*)PyArray_GetPtr((PyArrayObject*)weights, pp);
+	for (int i = 0; i < ptr->length; i++) {
+		sip[i] = ptr->srcidxs[i];
+		dip[i] = ptr->dstidxs[i];
+		wp[i] = ptr->weights[i];
+	}
+
+	free_twit_single_axis(ptr);
 
 	PyObject* rslt = PyTuple_New(3);
 	PyTuple_SetItem(rslt, 0, srcidxs);
 	PyTuple_SetItem(rslt, 1, dstidxs);
 	PyTuple_SetItem(rslt, 2, weights);
-	Py_INCREF(rslt);
 	return rslt;
 
 }
@@ -440,6 +478,8 @@ void _make_and_apply_twit(const INT64 n_dims, double const* const t1, INT64 cons
 
 	// Apply from t1 to t2
 	_apply_twit(axs, t1, t1_dims, t2, t2_dims, preclear);
+
+	free_twit_multi_axis(axs);
 }
 
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
@@ -683,12 +723,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 void twit_multi_axis_destructor(PyObject* obj) {
 	printf("twit_multi_axis_destructor\n");
 	twit_multi_axis* ptr = (twit_multi_axis*)PyCapsule_GetPointer(obj, "twit_multi_axis");
-	for (int i = 0; i < ptr->length; i++) {
-		PyMem_Free(ptr->axs[i]->dstidxs);
-		PyMem_Free(ptr->axs[i]->srcidxs);
-		PyMem_Free(ptr->axs[i]->weights);
-	}
-	PyMem_Free(ptr);
+	free_twit_multi_axis(ptr);
 }
 
 PyObject* compute_twit_multi_dimension_impl(PyObject*, PyObject* args) {
@@ -747,25 +782,28 @@ PyObject* unpack_twit_multi_axis_impl(PyObject*, PyObject* args) {
 		PyObject* axres = PyTuple_New(4);
 		PyTuple_SetItem(axres, 0, PyLong_FromLongLong(ax->length));
 
-		// Make copies of the data so the twit PyCapsule can dissapear and not take the array with it.
+		npy_intp pp[] = { 0 };
 		npy_intp dims[1];
 		dims[0] = ax->length;
-		void* m = PyMem_Malloc(ax->length * sizeof(INT64));
-		Py_MEMCPY(m, ax->srcidxs, ax->length * sizeof(INT64));
-		PyObject* srcidxs = PyArray_SimpleNewFromData(1, dims, NPY_INT64, m);
-		PyArray_ENABLEFLAGS((PyArrayObject*)srcidxs, NPY_ARRAY_OWNDATA);
+		PyObject* srcidxs = PyArray_SimpleNew(1, dims, NPY_INT64);
+		INT64* sip = (INT64*)PyArray_GetPtr((PyArrayObject*)srcidxs, pp);
+		for (int k = 0; k < ax->length; k++) {
+			sip[k] = ax->srcidxs[k];
+		}
 		PyTuple_SetItem(axres, 1, srcidxs);
 
-		m = PyMem_Malloc(ax->length * sizeof(INT64));
-		Py_MEMCPY(m, ax->dstidxs, ax->length * sizeof(INT64));
-		PyObject* dstidxs = PyArray_SimpleNewFromData(1, dims, NPY_INT64, m);
-		PyArray_ENABLEFLAGS((PyArrayObject*)dstidxs, NPY_ARRAY_OWNDATA);
+		PyObject* dstidxs = PyArray_SimpleNew(1, dims, NPY_INT64);
+		INT64* dip = (INT64*)PyArray_GetPtr((PyArrayObject*)dstidxs, pp);
+		for (int k = 0; k < ax->length; k++) {
+			dip[k] = ax->dstidxs[k];
+		}
 		PyTuple_SetItem(axres, 2, dstidxs);
 
-		m = PyMem_Malloc(ax->length * sizeof(double));
-		Py_MEMCPY(m, ax->weights, ax->length * sizeof(double));
-		PyObject* weights = PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE, m);
-		PyArray_ENABLEFLAGS((PyArrayObject*)weights, NPY_ARRAY_OWNDATA);
+		PyObject* weights = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+		double* wp = (double *)PyArray_GetPtr((PyArrayObject*)weights, pp);
+		for (int k = 0; k < ax->length; k++) {
+			wp[k] = ax->weights[k];
+		}
 		PyTuple_SetItem(axres, 3, weights);
 
 		PyTuple_SetItem(rslt, i + 1, axres);
@@ -850,6 +888,5 @@ PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
 	PyTuple_SetItem(rslt, 1, srcidxs);
 	PyTuple_SetItem(rslt, 2, dstidxs);
 	PyTuple_SetItem(rslt, 3, weights);
-	Py_INCREF(rslt);
 	return rslt;
 }
