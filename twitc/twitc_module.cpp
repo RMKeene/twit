@@ -77,13 +77,88 @@ PyMODINIT_FUNC PyInit_twitc() {
 }
 
 /// Returns either +1 or -1, if x is 0 then returns +1
-inline INT64 twit_sign(INT64 x) {
+inline INT64 twit_sign(const INT64 x) {
 	return (INT64)(x >= 0l) - (INT64)(x < 0l);
+}
+
+void print_spaces(const int spaces) {
+	for (int i = 0; i < spaces; i++) {
+		printf(" ");
+	}
+}
+
+void print_range_series(const range_series* t, const int spaces, const char* preamble) {
+	print_spaces(spaces);
+	printf(preamble);
+	if (!t) {
+		printf("NULL\n");
+		return;
+	}
+	if (t->length == 0) {
+		printf("length 0\n");
+		return;
+	}
+	if (t->length == 1) {
+		printf("length 1: idx %lld, value %f\n", t->idxs[0], t->values[0]);
+		return;
+	}
+	printf("length %lld\n", t->length);
+	for (INT64 i = 0; i < t->length; i++) {
+		print_spaces(spaces + 4);
+		printf("%lld: idx %lld, value %f\n", i, t->idxs[i], t->values[i]);
+	}
+}
+
+void print_twit_single_axis(const twit_single_axis* t, const int spaces, const char* preamble) {
+	print_spaces(spaces);
+	printf(preamble);
+	if (!t) {
+		printf("NULL\n");
+		return;
+	}
+	if (t->length == 0) {
+		printf("length 0\n");
+		return;
+	}
+	if (t->length == 1) {
+		printf("length 1: srcidx %lld, dstidx %lld, weight %f\n", t->srcidxs[0], t->dstidxs[0], t->weights[0]);
+		return;
+	}
+	printf("length %lld\n", t->length);
+	for (INT64 i = 0; i < t->length; i++) {
+		print_spaces(spaces + 4);
+		printf("%lld: srcidx %lld, dstidx %lld, weight %f\n", i, t->srcidxs[i], t->dstidxs[i], t->weights[i]);
+	}
+}
+
+void print_twit_multi_axis(const twit_multi_axis* t, const int spaces, const char* preamble) {
+	char buf[64];
+	print_spaces(spaces);
+	printf(preamble);
+	if (!t) {
+		printf("NULL\n");
+		return;
+	}
+
+	if (t->length == 0) {
+		printf("length 0\n");
+		return;
+	}
+
+	printf("length %lld\n", t->length);
+	for (INT64 i = 0; i < t->length; i++) {
+		sprintf_s(buf, sizeof(buf), "%lld: ", i);
+		print_twit_single_axis(t->axs[i], spaces + 4, buf);
+	}
 }
 
 void free_range_series(range_series* p)
 {
 	printf("\nfree_range_series\n");
+	if (!p) {
+		printf("    NULL\n");
+		return;
+	}
 	PyMem_Free(p->idxs);
 	PyMem_Free(p->values);
 	PyMem_Free(p);
@@ -91,6 +166,10 @@ void free_range_series(range_series* p)
 
 void free_twit_single_axis(twit_single_axis* p) {
 	printf("\nfree_twit_single_axis\n");
+	if (!p) {
+		printf("    NULL\n");
+		return;
+	}
 	PyMem_Free(p->dstidxs);
 	PyMem_Free(p->srcidxs);
 	PyMem_Free(p->weights);
@@ -99,6 +178,10 @@ void free_twit_single_axis(twit_single_axis* p) {
 
 void free_twit_multi_axis(twit_multi_axis* p) {
 	printf("\nfree_twit_multi_axis\n");
+	if (!p) {
+		printf("    NULL\n");
+		return;
+	}
 	for (int i = 0; i < p->length; i++) {
 		free_twit_single_axis(p->axs[i]);
 	}
@@ -114,7 +197,7 @@ double _twit_interp(INT64 range_start, INT64 range_end, double value_start, doub
 	return value_start + (value_end - value_start) * (idx - range_start) / rspan;
 }
 
-bool _outside_range(INT64 start, INT64 end, INT64 idx) {
+bool _outside_range(const INT64 start, const INT64 end, const INT64 idx) {
 	///True if idx is not between start and end inclusive.
 	//printf("_outside_range: start %d, end %d, idx %d\n", start, end, idx);
 	if (start <= end) {
@@ -157,7 +240,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 		PyErr_SetString(PyExc_Exception, "find_range_series_multipliers: narrow_idx is out of range.  Must be in the narrow_range (inclusive).");
 		return NULL;
 	}
-	// Force narrow and wide ranges to be in order.At this low level it does
+	// Force narrow and wide ranges to be in order. At this low level it does
 	// not matter which order we sequence the return values.
 	if (narrow_range_start > narrow_range_end) {
 		INT64 t = narrow_range_start;
@@ -252,6 +335,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	}
 
 	// Weights of ret will always sum to 1.0 (They are normalized)
+	print_range_series(ret, 0, "range series:");
 	return ret;
 }
 
@@ -399,6 +483,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 	}
 
 	ret->length = sz;
+	print_twit_single_axis(ret, 0, "TWIT Single Ax: ");
 	return ret;
 }
 
@@ -454,7 +539,7 @@ twit_multi_axis* _compute_twit_multi_dimension(const INT64 n_dims, INT64 const* 
 	printf("_compute_twit_multi_dimension: n_dims %lld\n", n_dims);
 
 	for (INT64 i = 0; i < n_dims; i++) {
-		printf("_compute_twit_multi_dimension: %lld\n", i);
+		printf(" _compute_twit_multi_dimension: %lld\n", i);
 		// This points to t1_start, t1_end, t2_start, t2_end
 		INT64 const* const twit_ii = twit_i + i * 4LL;
 		// This points to w_start, w_end
@@ -462,6 +547,7 @@ twit_multi_axis* _compute_twit_multi_dimension(const INT64 n_dims, INT64 const* 
 		twit->axs[i] = _compute_twit_single_dimension(twit_ii[0], twit_ii[1], twit_ii[2], twit_ii[3], twit_wi[0], twit_wi[1]);
 	}
 
+	print_twit_multi_axis(twit, 0, "TWIT: ");
 	return(twit);
 }
 
@@ -483,7 +569,7 @@ void _make_and_apply_twit(const INT64 n_dims, double const* const t1, INT64 cons
 }
 
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
-	printf("TWIT  _apply_twit\n");
+	printf("TWIT  _apply_twit  ");
 	if (twit == NULL) throw 1;
 	// Src
 	if (t1 == NULL) throw 2;
@@ -493,11 +579,11 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 	// Fast constants. This entire method tries top save every cpu cycle possible.
 	// Premature optimization is the root of all evil, yada yada yada.
 	const INT64 L = twit->length;
+	printf("L = %lld\n", L);
 
 	if (L <= 0) throw 4;
 
 	const INT64 L0 = twit->axs[0]->length;
-	printf("L0=%lld\n", L0);
 	// These three are the source indicies, dset indicies, and weight triples along a given axis.
 	// Generated by compute_twit_single_dimension()
 	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
@@ -562,7 +648,6 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 			const INT64 L2 = twit->axs[2]->length;
 
 			if (L == 3) {
-				printf("_apply_twit  3D\n");
 				const INT64 srcadvance1 = t1_dims[2];
 				const INT64 dstadvance1 = t2_dims[2];
 				const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
@@ -571,7 +656,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 					for (INT64 i0 = 0; i0 < L0; i0++) {
 						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 						for (INT64 i1 = 0; i1 < L1; i1++) {
-							const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 							for (INT64 i2 = 0; i2 < L2; i2++) {
 								t2[dstidxs2[i2] + doff1] = 0.0;
 							}
@@ -583,8 +668,8 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 					const double w0 = ws0[i0];
 					for (INT64 i1 = 0; i1 < L1; i1++) {
-						const INT64 soff1 = srcadvance1 * srcidxs1[i1];
-						const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+						const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 						const double w1 = ws1[i1] * w0;
 						for (INT64 i2 = 0; i2 < L2; i2++) {
 							t2[dstidxs2[i2] + doff1] += t1[srcidxs2[i2] + soff1] * w1 * ws2[i2];
@@ -610,9 +695,9 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 						for (INT64 i0 = 0; i0 < L0; i0++) {
 							const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 							for (INT64 i1 = 0; i1 < L1; i1++) {
-								const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+								const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 								for (INT64 i2 = 0; i2 < L2; i2++) {
-									const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 									for (INT64 i3 = 0; i3 < L3; i3++) {
 										t2[dstidxs3[i3] + doff2] = 0.0;
 									}
@@ -625,12 +710,12 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 						const double w0 = ws0[i0];
 						for (INT64 i1 = 0; i1 < L1; i1++) {
-							const INT64 soff1 = srcadvance1 * srcidxs1[i1];
-							const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+							const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 							const double w1 = ws1[i1] * w0;
 							for (INT64 i2 = 0; i2 < L2; i2++) {
-								const INT64 soff2 = srcadvance2 * srcidxs2[i2];
-								const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+								const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+								const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 								const double w2 = ws2[i2] * w1;
 								for (INT64 i3 = 0; i3 < L3; i3++) {
 									t2[dstidxs3[i3] + doff2] += t1[srcidxs3[i3] + soff2] * w2 * ws3[i3];
@@ -659,11 +744,11 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 							for (INT64 i0 = 0; i0 < L0; i0++) {
 								const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 								for (INT64 i1 = 0; i1 < L1; i1++) {
-									const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+									const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 									for (INT64 i2 = 0; i2 < L2; i2++) {
-										const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+										const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 										for (INT64 i3 = 0; i3 < L3; i3++) {
-											const INT64 doff3 = dstadvance3 * dstidxs3[i3];
+											const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
 											for (INT64 i4 = 0; i4 < L4; i4++) {
 												t2[dstidxs4[i4] + doff3] = 0.0;
 											}
@@ -677,16 +762,16 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 							const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 							const double w0 = ws0[i0];
 							for (INT64 i1 = 0; i1 < L1; i1++) {
-								const INT64 soff1 = srcadvance1 * srcidxs1[i1];
-								const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+								const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+								const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 								const double w1 = ws1[i1] * w0;
 								for (INT64 i2 = 0; i2 < L2; i2++) {
-									const INT64 soff2 = srcadvance2 * srcidxs2[i2];
-									const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+									const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 									const double w2 = ws2[i2] * w1;
 									for (INT64 i3 = 0; i3 < L3; i3++) {
-										const INT64 soff3 = srcadvance3 * srcidxs3[i3];
-										const INT64 doff3 = dstadvance3 * dstidxs3[i3];
+										const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+										const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
 										const double w3 = ws3[i3] * w2;
 										for (INT64 i4 = 0; i4 < L4; i4++) {
 											t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4];
@@ -718,13 +803,13 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 								for (INT64 i0 = 0; i0 < L0; i0++) {
 									const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 									for (INT64 i1 = 0; i1 < L1; i1++) {
-										const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+										const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 										for (INT64 i2 = 0; i2 < L2; i2++) {
-											const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+											const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 											for (INT64 i3 = 0; i3 < L3; i3++) {
-												const INT64 doff3 = dstadvance3 * dstidxs3[i3];
+												const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
 												for (INT64 i4 = 0; i4 < L4; i4++) {
-													const INT64 doff4 = dstadvance4 * dstidxs4[i4];
+													const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
 													for (INT64 i5 = 0; i5 < L5; i5++) {
 														t2[dstidxs5[i5] + doff4] = 0.0;
 													}
@@ -739,20 +824,20 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 								const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 								const double w0 = ws0[i0];
 								for (INT64 i1 = 0; i1 < L1; i1++) {
-									const INT64 soff1 = srcadvance1 * srcidxs1[i1];
-									const INT64 doff1 = dstadvance1 * dstidxs1[i1];
+									const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+									const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 									const double w1 = ws1[i1] * w0;
 									for (INT64 i2 = 0; i2 < L2; i2++) {
-										const INT64 soff2 = srcadvance2 * srcidxs2[i2];
-										const INT64 doff2 = dstadvance2 * dstidxs2[i2];
+										const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+										const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
 										const double w2 = ws2[i2] * w1;
 										for (INT64 i3 = 0; i3 < L3; i3++) {
-											const INT64 soff3 = srcadvance3 * srcidxs3[i3];
-											const INT64 doff3 = dstadvance3 * dstidxs3[i3];
+											const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+											const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
 											const double w3 = ws3[i3] * w2;
 											for (INT64 i4 = 0; i4 < L4; i4++) {
-												const INT64 soff4 = srcadvance4 * srcidxs4[i4];
-												const INT64 doff4 = dstadvance4 * dstidxs4[i4];
+												const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+												const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
 												const double w4 = ws4[i4] * w3;
 												for (INT64 i5 = 0; i5 < L5; i5++) {
 													t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];

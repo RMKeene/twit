@@ -137,7 +137,7 @@ class TestTwitc(unittest.TestCase):
         nt.assert_array_almost_equal(t[2][1], [0, 1, 2, 3, 1, 2, 3, 4])
         nt.assert_array_almost_equal(t[2][2], [0, 0, 0, 0, 1, 1, 1, 1])
         nt.assert_array_almost_equal(t[2][3], [0.4, 0.3, 0.2, 0.1, 0.1, 0.2, 0.3, 0.4])
-        return;
+
         ttt = t
         tt = twitc.pack_twit_multi_axis(ttt)
         t = twitc.unpack_twit_multi_axis(tt)
@@ -192,29 +192,48 @@ class TestTwitc(unittest.TestCase):
              [1., 1., 1., 1., 1.],
              [1., 1., 1., 1., 1.]]
         npt.assert_array_almost_equal(t2, a)
-        #
-        #t1 = np.ones((5, 3))
-        #t1[1, 1] = 0.5
-        #t2 = np.ones((4, 5))
-        #t = twit(([(0, 4), (0, 3), (0.0, 1.0)], [(0, 2), (0, 4), (1.0, 1.0)]))
-        #apply_twit(t1, t2, twt=t, preclear=True)
-        #a = [[0.05, 0.03928571, 0.025, 0.03928571, 0.05],
-        #     [0.35, 0.31785714, 0.275, 0.31785714, 0.35],
-        #     [0.65, 0.65, 0.65, 0.65, 0.65],
-        #     [0.95, 0.95, 0.95, 0.95, 0.95]]
-        #npt.assert_array_almost_equal(t2, a)
-        #
-        #t1 = np.ones((5, 4, 3))
-        #t1[3, 2, 1] = 0.5
-        #t2 = np.ones((3, 5, 1))
-        #t = twit(([(1,3), (0,2), (0.9, 0.5)], [(2, 3), (0,1), (1.0, 1.0)], [(0,2), (0,0), (1.0, 1.0)]))
-        #apply_twit(t1, t2, twt=t, preclear=True)
-        #
-        #a = [[[0.9], [0.9], [1.], [1.], [1.]], 
-        #     [[0.7], [0.7], [1.], [1.], [1.]],
-        #     [[0.41666667], [0.5], [1.], [1.], [1.]]]
-        #npt.assert_array_almost_equal(t2, a)
-        #
+        
+        # ------------------------------------------
+        # Test same tensors and twit but in different phases of caching.
+        t1 = np.ones((5, 3))
+        t1[1, 1] = 0.5
+        t2 = np.ones((4, 5))
+        twitc.make_and_apply_twit(2, np.array([0, 4, 0, 3, 0, 2, 0, 4], dtype=np.int64),  np.array([0.0, 1.0, 1.0, 1.0], dtype=np.float64), t1, t2, 1)
+        a = [[0.05, 0.03928571, 0.025, 0.03928571, 0.05],
+             [0.35, 0.31785714, 0.275, 0.31785714, 0.35],
+             [0.65, 0.65, 0.65, 0.65, 0.65],
+             [0.95, 0.95, 0.95, 0.95, 0.95]]
+        npt.assert_array_almost_equal(t2, a)
+        
+        # Same test again, but in two phases.
+        t1 = np.ones((5, 3))
+        t1[1, 1] = 0.5
+        t2 = np.ones((4, 5))
+        twt = twitc.compute_twit_multi_dimension(2, np.array([0, 4, 0, 3, 0, 2, 0, 4], dtype=np.int64),  np.array([0.0, 1.0, 1.0, 1.0], dtype=np.float64))
+        twitc.apply_twit(twt, t1, t2, 1)
+        npt.assert_array_almost_equal(t2, a)
+
+        # And test reuse of twt.
+        t1 = np.ones((5, 3))
+        t1[1, 1] = 0.5
+        t2 = np.ones((4, 5))
+        twitc.apply_twit(twt, t1, t2, 1)
+        npt.assert_array_almost_equal(t2, a)
+        # ------------------------------------------
+        
+        # 3D
+        t1 = np.ones((5, 4, 3))
+        t1[3, 2, 1] = 0.5
+        t2 = np.ones((3, 5, 1))
+        t = twit(([(1,3), (0,2), (0.9, 0.5)], [(2, 3), (0,1), (1.0, 1.0)], [(0,2), (0,0), (1.0, 1.0)]))
+        print("-----------------------------------------------------")
+        twitc.make_and_apply_twit(3, np.array([1, 3, 0, 2, 2, 3, 0, 1, 0, 2, 0, 0], dtype=np.int64),  np.array([0.9, 0.5, 1.0, 1.0, 1.0, 1.0], dtype=np.float64), t1, t2, 1)
+        
+        a = [[[0.9], [0.9], [1.], [1.], [1.]], 
+             [[0.7], [0.7], [1.], [1.], [1.]],
+             [[0.41666667], [0.5], [1.], [1.], [1.]]]
+        npt.assert_array_almost_equal(t2, a)
+        
         #t1 = np.ones((5, 4, 3))
         #t1[1, 1, 1] = 0.5
         #t2 = np.ones((3, 5, 1))
