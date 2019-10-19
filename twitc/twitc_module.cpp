@@ -154,9 +154,9 @@ void print_twit_multi_axis(const twit_multi_axis* t, const int spaces, const cha
 
 void free_range_series(range_series* p)
 {
-	printf("\nfree_range_series\n");
+	//printf("\nfree_range_series\n");
 	if (!p) {
-		printf("    NULL\n");
+		printf("free_range_series: NULL\n");
 		return;
 	}
 	PyMem_Free(p->idxs);
@@ -165,9 +165,9 @@ void free_range_series(range_series* p)
 }
 
 void free_twit_single_axis(twit_single_axis* p) {
-	printf("\nfree_twit_single_axis\n");
+	//printf("\nfree_twit_single_axis\n");
 	if (!p) {
-		printf("    NULL\n");
+		printf("free_twit_single_axis: NULL\n");
 		return;
 	}
 	PyMem_Free(p->dstidxs);
@@ -177,9 +177,9 @@ void free_twit_single_axis(twit_single_axis* p) {
 }
 
 void free_twit_multi_axis(twit_multi_axis* p) {
-	printf("\nfree_twit_multi_axis\n");
+	//printf("\nfree_twit_multi_axis\n");
 	if (!p) {
-		printf("    NULL\n");
+		printf("free_twit_multi_axis: NULL\n");
 		return;
 	}
 	for (int i = 0; i < p->length; i++) {
@@ -335,7 +335,7 @@ range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 nar
 	}
 
 	// Weights of ret will always sum to 1.0 (They are normalized)
-	print_range_series(ret, 0, "range series:");
+	//print_range_series(ret, 0, "range series:");
 	return ret;
 }
 
@@ -483,7 +483,7 @@ twit_single_axis* _compute_twit_single_dimension(const INT64 src_start, const IN
 	}
 
 	ret->length = sz;
-	print_twit_single_axis(ret, 0, "TWIT Single Ax: ");
+	//print_twit_single_axis(ret, 0, "TWIT Single Ax: ");
 	return ret;
 }
 
@@ -536,10 +536,10 @@ twit_multi_axis* _compute_twit_multi_dimension(const INT64 n_dims, INT64 const* 
 	twit_multi_axis* twit = new twit_multi_axis;
 	twit->length = n_dims;
 	twit->axs = (twit_single_axis**)PyMem_Malloc(n_dims * sizeof(twit_single_axis*));
-	printf("_compute_twit_multi_dimension: n_dims %lld\n", n_dims);
+	//printf("_compute_twit_multi_dimension: n_dims %lld\n", n_dims);
 
 	for (INT64 i = 0; i < n_dims; i++) {
-		printf(" _compute_twit_multi_dimension: %lld\n", i);
+		//printf(" _compute_twit_multi_dimension: %lld\n", i);
 		// This points to t1_start, t1_end, t2_start, t2_end
 		INT64 const* const twit_ii = twit_i + i * 4LL;
 		// This points to w_start, w_end
@@ -547,7 +547,7 @@ twit_multi_axis* _compute_twit_multi_dimension(const INT64 n_dims, INT64 const* 
 		twit->axs[i] = _compute_twit_single_dimension(twit_ii[0], twit_ii[1], twit_ii[2], twit_ii[3], twit_wi[0], twit_wi[1]);
 	}
 
-	print_twit_multi_axis(twit, 0, "TWIT: ");
+	//print_twit_multi_axis(twit, 0, "TWIT: ");
 	return(twit);
 }
 
@@ -569,7 +569,8 @@ void _make_and_apply_twit(const INT64 n_dims, double const* const t1, INT64 cons
 }
 
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
-	printf("TWIT  _apply_twit  ");
+	bool dbg = false;
+	if (dbg) printf("TWIT  _apply_twit  ");
 	if (twit == NULL) throw 1;
 	// Src
 	if (t1 == NULL) throw 2;
@@ -579,7 +580,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 	// Fast constants. This entire method tries top save every cpu cycle possible.
 	// Premature optimization is the root of all evil, yada yada yada.
 	const INT64 L = twit->length;
-	printf("L = %lld\n", L);
+	if (dbg) printf("L = %lld\n", L);
 
 	if (L <= 0) throw 4;
 
@@ -591,7 +592,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 	const double* ws0 = twit->axs[0]->weights;
 
 	if (L == 1) {
-		//printf("_apply_twit  1D\n");
+		if (dbg) printf("_apply_twit  1D\n");
 		if (preclear) {
 			//printf("preclear\n");
 			// TODO This preclear may set pixels to 0.0 more than once.
@@ -601,7 +602,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 				t2[srcidxs0[i0]] = 0.0;
 			}
 		}
-		//printf("Update src\n");
+		if (dbg) printf("Update src\n");
 		for (INT64 i0 = 0; i0 < L0; i0++) {
 			t2[dstidxs0[i0]] += t1[srcidxs0[i0]] * ws0[i0];
 		}
@@ -614,7 +615,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 		const INT64 L1 = twit->axs[1]->length;
 
 		if (L == 2) {
-			printf("_apply_twit  2D\n");
+			if (dbg) printf("_apply_twit  2D\n");
 			// This is how far a single incrmenet in the next higher axis advances along the source
 			// or destination ndarrays.
 			const INT64 srcadvance0 = t1_dims[1];
@@ -648,11 +649,13 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 			const INT64 L2 = twit->axs[2]->length;
 
 			if (L == 3) {
+				if (dbg) printf("_apply_twit  3D\n");
 				const INT64 srcadvance1 = t1_dims[2];
 				const INT64 dstadvance1 = t2_dims[2];
 				const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
 				const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
 				if (preclear) {
+					if (dbg) printf("  preclear\n");
 					for (INT64 i0 = 0; i0 < L0; i0++) {
 						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 						for (INT64 i1 = 0; i1 < L1; i1++) {
@@ -664,18 +667,27 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 					}
 				}
 				for (INT64 i0 = 0; i0 < L0; i0++) {
+					if (dbg) printf("  i0 %lld\n", i0);
 					const INT64 soff0 = srcadvance0 * srcidxs0[i0];
 					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
 					const double w0 = ws0[i0];
 					for (INT64 i1 = 0; i1 < L1; i1++) {
+						if (i1 == 0 || i1 == L1 - 1) {
+							if (dbg) printf("    i1 %lld\n", i1);
+						}
 						const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
 						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
 						const double w1 = ws1[i1] * w0;
 						for (INT64 i2 = 0; i2 < L2; i2++) {
+							if (i2 == 0 || i2 == L2 - 1) {
+								//printf("      i2 %lld\n", i2);
+								//printf("L %lld, %lld %lld  i %lld %lld %lld\n", L0, L1, L2, i0, i1, i2);
+							}
 							t2[dstidxs2[i2] + doff1] += t1[srcidxs2[i2] + soff1] * w1 * ws2[i2];
 						}
 					}
 				}
+				if (dbg) printf("  return ==========================================\n");
 				return;
 			}
 			else {
@@ -684,7 +696,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 				const double* ws3 = twit->axs[3]->weights;
 				const INT64 L3 = twit->axs[3]->length;
 				if (L == 4) {
-					printf("_apply_twit  4D\n");
+					if (dbg) printf("_apply_twit  4D\n");
 					const INT64 srcadvance2 = t1_dims[3];
 					const INT64 dstadvance2 = t2_dims[3];
 					const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
@@ -731,7 +743,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 					const double* ws4 = twit->axs[4]->weights;
 					const INT64 L4 = twit->axs[4]->length;
 					if (L == 5) {
-						printf("_apply_twit  5D\n");
+						if (dbg) printf("_apply_twit  5D\n");
 						const INT64 srcadvance3 = t1_dims[4];
 						const INT64 dstadvance3 = t2_dims[4];
 						const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
@@ -788,7 +800,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 						const double* ws5 = twit->axs[5]->weights;
 						const INT64 L5 = twit->axs[5]->length;
 						if (L == 6) {
-							printf("_apply_twit  6D\n");
+							if (dbg) printf("_apply_twit  6D\n");
 							const INT64 srcadvance4 = t1_dims[5];
 							const INT64 dstadvance4 = t2_dims[5];
 							const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
@@ -987,7 +999,7 @@ PyObject* pack_twit_multi_axis_impl(PyObject*, PyObject* args) {
 }
 
 PyObject* apply_twit_impl(PyObject*, PyObject* args) {
-	printf("TWITC apply_twit_impl\n");
+	//printf("TWITC apply_twit_impl\n");
 	PyObject* capobj;
 	PyObject* srcarrayobj;
 	PyObject* dstarrayobj;
@@ -995,7 +1007,7 @@ PyObject* apply_twit_impl(PyObject*, PyObject* args) {
 	PyArg_ParseTuple(args, "O!O!O!L", &PyCapsule_Type, &capobj, &PyArray_Type, &srcarrayobj, &PyArray_Type, &dstarrayobj, &preclear);
 
 	twit_multi_axis* twit = (twit_multi_axis*)PyCapsule_GetPointer(capobj, "twit_multi_axis");
-	printf("apply_twit_impl: ptr is 0x%p  length is %lld\n", twit, twit->length);
+	//printf("apply_twit_impl: ptr is 0x%p  length is %lld\n", twit, twit->length);
 
 	// So far we assume the src and dst arrays are packed and contiguous.  TODO - Add check for that and force to C array.
 
@@ -1008,7 +1020,7 @@ PyObject* apply_twit_impl(PyObject*, PyObject* args) {
 /// Arguments ar
 /// make_and_apply_twit(N_Dims, twit_integers_array, twit_double_array, src_ndarray, dst_ndarray, preclear)
 PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
-	printf("TWITC make_and_apply_twit_impl\n");
+	//printf("TWITC make_and_apply_twit_impl\n");
 	PyErr_Clear();
 	// How many dimentsion t1 and t2 will have.
 	INT64 n_dims;
@@ -1025,9 +1037,9 @@ PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
 	double* dst;
 
 
-	printf("TWITC parse args...\n");
+	//printf("TWITC parse args...\n");
 	PyArg_ParseTuple(args, "LO!O!O!O!L", &n_dims, &PyArray_Type, &int_array, &PyArray_Type, &double_array, &PyArray_Type, &srcarrayobj, &PyArray_Type, &dstarrayobj, &preclear);
-	printf("n_dims %lld  preclear=%lld\n", n_dims, preclear);
+	//printf("n_dims %lld  preclear=%lld\n", n_dims, preclear);
 
 	twit_i = (INT64*)PyArray_DATA(int_array);
 	twit_w = (double*)PyArray_DATA(double_array);
@@ -1035,7 +1047,7 @@ PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
 	dst = (double*)PyArray_DATA(dstarrayobj);
 
 	twit_multi_axis* twit = _compute_twit_multi_dimension(n_dims, twit_i, twit_w);
-	printf("make_and_apply_twit_impl: ptr is 0x%p  length is %lld\n", twit, twit->length);
+	//printf("make_and_apply_twit_impl: ptr is 0x%p  length is %lld\n", twit, twit->length);
 
 	// So far we assume the src and dst arrays are packed and contiguous.  TODO - Add check for that and force to C array.
 
