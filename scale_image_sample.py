@@ -9,7 +9,7 @@ def scale_image():
     Test code and example to scale an image using Twit.
     """
 
-    im = Image.open("dog1.jpg")
+    im = Image.open(r"K:\twit\dog1.jpg")
     plt.imshow(im, cmap='Greys_r')
     plt.show()
     pass
@@ -60,4 +60,5 @@ def scale_image_C_code():
  
 if __name__ == '__main__':
     print("Scale Image with twit sample program.")
-    scale_image_C_code()
+    scale_image()
+    #scale_image_C_code()
