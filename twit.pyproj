@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{5fae73ad-5d99-46f0-82d6-22f11a1ee5ff}</ProjectGuid>
     <ProjectHome>..\</ProjectHome>
-    <StartupFile>twit\twit_test.py</StartupFile>
+    <StartupFile>twit\twitc_test.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -18,6 +18,9 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
   <PropertyGroup>
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Fast Debug' ">
+    <OutputPath>bin\Fast Debug\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="twit\dog1.jpg" />

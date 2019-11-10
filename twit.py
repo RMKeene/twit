@@ -50,15 +50,15 @@ class range_series:
 class twit_single_axis:
 	def __init__(self, length: int):
 		self.length = length
-		srcidxs = np.zeros(length, dtype=np.int64)
-		dstidxs = np.zeros(length, dtype=np.int64)
-		weights = np.zeros(length, dtype=np.float)
+		self.srcidxs = np.zeros(length, dtype=np.int64)
+		self.dstidxs = np.zeros(length, dtype=np.int64)
+		self.weights = np.zeros(length, dtype=np.float)
 
 
 class twit_multi_axis:
 	def __init__(self, length: int):
 		self.length = length
-		axs = []
+		self.axs = []
 
 class TwitError(Exception):
 	"""Base class for exceptions in this module."""
@@ -123,9 +123,9 @@ def split_strip(s: str, sep=' '):
 # Returns either +1 or -1, if x is 0 then returns +1
 def twit_sign(x: int) -> int:
 	if x < 0:
-		return 1
-	else:
 		return -1
+	else:
+		return 1
 
 
 def match_tensor_shape_lengths(t1, t2):
@@ -470,11 +470,11 @@ def compute_twit_single_dimension(src_start, src_end, dst_start, dst_end, w_star
 		dsti = dst_start
 		sz = 0
 		for srci in range(src_start, src_end + src_inc, src_inc):
-			dsti += dst_inc
-			sz += 1 
 			ret.srcidxs[sz] = srci
 			ret.dstidxs[sz] = dsti
 			ret.weights[sz] = twit_interp(src_start, src_end, w_start, w_end, srci)
+			sz += 1 
+			dsti += dst_inc
 		# Normalization not needed for one to one.
 	elif fan == TWIT_FAN_IN:
 		srci = src_start
@@ -485,7 +485,7 @@ def compute_twit_single_dimension(src_start, src_end, dst_start, dst_end, w_star
 				srci += src_inc
 				splits = find_range_series_multipliers(dst_start, dst_end, src_start, src_end, dsti)
 				for spi in range(0, splits.length):
-					k = ret.rcidxs[sz] = splits.idxs[spi]
+					k = ret.srcidxs[sz] = splits.idxs[spi]
 					ret.dstidxs[sz] = dsti
 					ret.weights[sz] = splits.values[spi]
 					sums[(dsti - dst_start) * dst_inc] += ret.weights[sz]
@@ -508,7 +508,7 @@ def compute_twit_single_dimension(src_start, src_end, dst_start, dst_end, w_star
 			splits = find_range_series_multipliers(src_start, src_end, dst_start, dst_end, srci)
 			for spi in range(0, splits.length):
 				ret.srcidxs[sz] = srci
-				k = ret.dstidxs[sz] = splits.idxs[spi]
+				k = ret.dstidxs[sz] = int(splits.idxs[spi])
 				ret.weights[sz] = splits.values[spi]
 				sums[k * dst_inc - dst_start] += ret.weights[sz]
 				sz += 1
@@ -517,7 +517,20 @@ def compute_twit_single_dimension(src_start, src_end, dst_start, dst_end, w_star
 		# interpolated weights across the weight range.
 		for i in range(0, sz):
 			k = ret.dstidxs[i]
-			ret.weights[i] *= _twit_interp(dst_start, dst_end, w_start, w_end, ret.dstidxs[i]) / sums[k * dst_inc - dst_start]
+			ret.weights[i] *= twit_interp(dst_start, dst_end, w_start, w_end, ret.dstidxs[i]) / sums[k * dst_inc - dst_start]
+
+	if len(ret.weights) > sz:
+		ww = np.zeros(sz, dtype=np.float)
+		ss = np.zeros(sz, dtype=np.int64)
+		dd = np.zeros(sz, dtype=np.int64)
+		for i in range(sz):
+			ww[i] = ret.weights[i]
+			ss[i] = ret.srcidxs[i]
+			dd[i] = ret.dstidxs[i]
+		ret.length = sz
+		ret.weights = ww
+		ret.srcidxs = ss
+		ret.dstidxs = dd
 
 	# print_twit_single_axis(ret, 0, "TWIT Single Ax: ")
 	return ret
@@ -532,14 +545,14 @@ def compute_twit_single_dimension(src_start, src_end, dst_start, dst_end, w_star
 # repeating in python order for the dimensions.
 def compute_twit_multi_dimension(n_dims: int, twit_i, twit_w):
 	# Generate axis series'
-	twit = twit_multi_axis(ndims)
+	twit = twit_multi_axis(n_dims)
 	#printf("_compute_twit_multi_dimension: n_dims %llD", n_dims)
 
 	for i in range(0, n_dims):
 		#printf(" _compute_twit_multi_dimension: %llD", i)
 		i2 = i * 2
 		i4 = i * 4
-		twit.axs[i] = compute_twit_single_dimension(twit_i[i4], twit_i[i4 + 1], twit_i[i4 + 2], twit_i[i4 + 3], twit_w[i2], twit_w[i2 + 1])
+		twit.axs.append(compute_twit_single_dimension(twit_i[i4], twit_i[i4 + 1], twit_i[i4 + 2], twit_i[i4 + 3], twit_w[i2], twit_w[i2 + 1]))
 
 	return twit
 
@@ -556,6 +569,9 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 	# Dst
 	if t2 is None:
 	   raise TwitException("apply_twit: t2 is None")
+
+	t1flat = t1.ravel()
+	t2flat = t2.ravel()
 
 	# Fast constants.  This entire method tries top save every cpu cycle possible.
 	# Premature optimization is the root of all evil, yada yada yada.
@@ -583,11 +599,11 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 			# Could have a more efficient version that uses the dimension span
 			# and directly sets the values, not from srcidxs0[N]
 			for i0 in range(0,  L0):
-				t2[srcidxs0[i0]] = 0.0
+				t2flat[dstidxs0[i0]] = 0.0
 		if dbg:
 			print("Update src")
 		for i0 in range(0, L0):
-			t2[dstidxs0[i0]] += t1[srcidxs0[i0]] * ws0[i0]
+			t2flat[dstidxs0[i0]] += t1flat[srcidxs0[i0]] * ws0[i0]
 		return
 	else: # L >= 2
 		srcidxs1 = twit.axs[1].srcidxs
@@ -598,11 +614,11 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 		if L == 2:
 			if dbg:
 				print("_apply_twit  2D")
-			# This is how far a single incrmenet in the next higher axis advances along
+			# This is how far a single increment in the next higher axis advances along
 			# the source
 			# or destination ndarrays.
-			srcadvance0 = t1_dims[1]
-			dstadvance0 = t2_dims[1]
+			srcadvance0 = t1.shape[1]
+			dstadvance0 = t2.shape[1]
 
 			# Note: Dimensions are innermost last in the lists!
 			# So dim[0] (first dim) changes the slowest and dim[L - 1] (last dim)
@@ -612,13 +628,13 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 				for i0 in range(L0):
 					doff0 = dstadvance0 * dstidxs0[i0]
 					for i1 in range(L1):
-						t2[dstidxs1[i1] + doff0] = 0.0
+						t2flat[dstidxs1[i1] + doff0] = 0.0
 			for i0 in range(L0):
 				soff0 = srcadvance0 * srcidxs0[i0]
 				doff0 = dstadvance0 * dstidxs0[i0]
 				w0 = ws0[i0]
 				for i1 in range(L1):
-					t2[dstidxs1[i1] + doff0] += t1[srcidxs1[i1] + soff0] * w0 * ws1[i1]
+					t2flat[dstidxs1[i1] + doff0] += t1flat[srcidxs1[i1] + soff0] * w0 * ws1[i1]
 			return
 		else:
 			srcidxs2 = twit.axs[2].srcidxs
@@ -629,10 +645,10 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 			if L == 3:
 				if dbg: 
 					printf("_apply_twit  3D")
-				srcadvance1 = t1_dims[2]
-				dstadvance1 = t2_dims[2]
-				srcadvance0 = t1_dims[1] * srcadvance1
-				dstadvance0 = t2_dims[1] * dstadvance1
+				srcadvance1 = t1.shape[2]
+				dstadvance1 = t2.shape[2]
+				srcadvance0 = t1.shape[1] * srcadvance1
+				dstadvance0 = t2.shape[1] * dstadvance1
 				if preclear:
 					if dbg: 
 						printf("  preclear")
@@ -641,7 +657,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 						for i1 in range(L1):
 							doff1 = doff0 + dstadvance1 * dstidxs1[i1]
 							for i2 in range(L2):
-								t2[dstidxs2[i2] + doff1] = 0.0
+								t2flat[dstidxs2[i2] + doff1] = 0.0
 				for i0 in range(L0):
 					if dbg: 
 						print("  i0 %d" % i0)
@@ -656,7 +672,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 							#if i2 == 0 or i2 == L2 - 1:
 								#printf(" i2 %llD", i2)
 								#printf("L %lld, %lld %lld i %lld %lld %llD", L0, L1, L2, i0, i1, i2)
-							t2[dstidxs2[i2] + doff1] += t1[srcidxs2[i2] + soff1] * w1 * ws2[i2]
+							t2flat[dstidxs2[i2] + doff1] += t1flat[srcidxs2[i2] + soff1] * w1 * ws2[i2]
 				if dbg: 
 					printf("  return ==========================================\n")
 				return
@@ -668,12 +684,12 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 				if L == 4:
 					if dbg: 
 						printf("_apply_twit  4D")
-					srcadvance2 = t1_dims[3]
-					dstadvance2 = t2_dims[3]
-					srcadvance1 = t1_dims[2] * srcadvance2
-					dstadvance1 = t2_dims[2] * dstadvance2
-					srcadvance0 = t1_dims[1] * srcadvance1
-					dstadvance0 = t2_dims[1] * dstadvance1
+					srcadvance2 = t1.shape[3]
+					dstadvance2 = t2.shape[3]
+					srcadvance1 = t1.shape[2] * srcadvance2
+					dstadvance1 = t2.shape[2] * dstadvance2
+					srcadvance0 = t1.shape[1] * srcadvance1
+					dstadvance0 = t2.shape[1] * dstadvance1
 					if preclear:
 						for i0 in range(L0):
 							doff0 = dstadvance0 * dstidxs0[i0]
@@ -682,7 +698,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 								for i2 in range(L2):
 									doff2 = doff1 + dstadvance2 * dstidxs2[i2]
 									for i3 in range(L3):
-										t2[dstidxs3[i3] + doff2] = 0.0
+										t2flat[dstidxs3[i3] + doff2] = 0.0
 					for i0 in range(L0):
 						soff0 = srcadvance0 * srcidxs0[i0]
 						doff0 = dstadvance0 * dstidxs0[i0]
@@ -696,7 +712,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 								doff2 = doff1 + dstadvance2 * dstidxs2[i2]
 								w2 = ws2[i2] * w1
 								for i3 in range(L3):
-									t2[dstidxs3[i3] + doff2] += t1[srcidxs3[i3] + soff2] * w2 * ws3[i3]
+									t2flat[dstidxs3[i3] + doff2] += t1flat[srcidxs3[i3] + soff2] * w2 * ws3[i3]
 					return
 				else:
 					srcidxs4 = twit.axs[4].srcidxs
@@ -706,14 +722,14 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 					if L == 5:
 						if dbg: 
 							print("_apply_twit  5D")
-						srcadvance3 = t1_dims[4]
-						dstadvance3 = t2_dims[4]
-						srcadvance2 = t1_dims[3] * srcadvance3
-						dstadvance2 = t2_dims[3] * dstadvance3
-						srcadvance1 = t1_dims[2] * srcadvance2
-						dstadvance1 = t2_dims[2] * dstadvance2
-						srcadvance0 = t1_dims[1] * srcadvance1
-						dstadvance0 = t2_dims[1] * dstadvance1
+						srcadvance3 = t1.shape[4]
+						dstadvance3 = t2.shape[4]
+						srcadvance2 = t1.shape[3] * srcadvance3
+						dstadvance2 = t2.shape[3] * dstadvance3
+						srcadvance1 = t1.shape[2] * srcadvance2
+						dstadvance1 = t2.shape[2] * dstadvance2
+						srcadvance0 = t1.shape[1] * srcadvance1
+						dstadvance0 = t2.shape[1] * dstadvance1
 						if preclear:
 							for i0 in range(L0):
 								doff0 = dstadvance0 * dstidxs0[i0]
@@ -724,7 +740,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 										for i3 in range(L3):
 											doff3 = doff2 + dstadvance3 * dstidxs3[i3]
 											for i4 in range(L4):
-												t2[dstidxs4[i4] + doff3] = 0.0
+												t2flat[dstidxs4[i4] + doff3] = 0.0
 						for i0 in range(L0):
 							soff0 = srcadvance0 * srcidxs0[i0]
 							doff0 = dstadvance0 * dstidxs0[i0]
@@ -742,7 +758,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 										doff3 = doff2 + dstadvance3 * dstidxs3[i3]
 										w3 = ws3[i3] * w2
 										for i4 in range(L4):
-											t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4]
+											t2flat[dstidxs4[i4] + doff3] += t1flat[srcidxs4[i4] + soff3] * w3 * ws4[i4]
 						return
 					else:
 						srcidxs5 = twit.axs[5].srcidxs
@@ -752,16 +768,16 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 						if L == 6:
 							if dbg: 
 								print("_apply_twit  6D")
-							srcadvance4 = t1_dims[5]
-							dstadvance4 = t2_dims[5]
-							srcadvance3 = t1_dims[4] * srcadvance4
-							dstadvance3 = t2_dims[4] * dstadvance4
-							srcadvance2 = t1_dims[3] * srcadvance3
-							dstadvance2 = t2_dims[3] * dstadvance3
-							srcadvance1 = t1_dims[2] * srcadvance2
-							dstadvance1 = t2_dims[2] * dstadvance2
-							srcadvance0 = t1_dims[1] * srcadvance1
-							dstadvance0 = t2_dims[1] * dstadvance1
+							srcadvance4 = t1.shape[5]
+							dstadvance4 = t2.shape[5]
+							srcadvance3 = t1.shape[4] * srcadvance4
+							dstadvance3 = t2.shape[4] * dstadvance4
+							srcadvance2 = t1.shape[3] * srcadvance3
+							dstadvance2 = t2.shape[3] * dstadvance3
+							srcadvance1 = t1.shape[2] * srcadvance2
+							dstadvance1 = t2.shape[2] * dstadvance2
+							srcadvance0 = t1.shape[1] * srcadvance1
+							dstadvance0 = t2.shape[1] * dstadvance1
 							if preclear:
 								for i0 in range(L0):
 									doff0 = dstadvance0 * dstidxs0[i0]
@@ -774,7 +790,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 												for i4 in range(L4):
 													doff4 = doff3 + dstadvance4 * dstidxs4[i4]
 													for i5 in range(L5):
-														t2[dstidxs5[i5] + doff4] = 0.0
+														t2flat[dstidxs5[i5] + doff4] = 0.0
 							for i0 in range(L0):
 								soff0 = srcadvance0 * srcidxs0[i0]
 								doff0 = dstadvance0 * dstidxs0[i0]
@@ -796,7 +812,7 @@ def apply_twit(twit, t1: np.ndarray, t2: np.ndarray, preclear: int):
 												doff4 = doff3 + dstadvance4 * dstidxs4[i4]
 												w4 = ws4[i4] * w3
 												for i5 in range(L5):
-													t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5]
+													t2flat[dstidxs5[i5] + doff4] += t1flat[srcidxs5[i5] + soff4] * w4 * ws5[i5]
 							return
 						else:
 							# Tsk tsk tsk, unimplemented number of dimensions.

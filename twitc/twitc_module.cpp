@@ -876,7 +876,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 }
 
 void twit_multi_axis_destructor(PyObject* obj) {
-	printf("twit_multi_axis_destructor\n");
+	//printf("twit_multi_axis_destructor\n");
 	twit_multi_axis* ptr = (twit_multi_axis*)PyCapsule_GetPointer(obj, "twit_multi_axis");
 	free_twit_multi_axis(ptr);
 }
@@ -920,18 +920,18 @@ PyObject* compute_twit_multi_dimension_impl(PyObject*, PyObject* args) {
 }
 
 PyObject* unpack_twit_multi_axis_impl(PyObject*, PyObject* args) {
-	printf("unpack_twit_multi_axis\n");
+	//printf("unpack_twit_multi_axis\n");
 	PyObject* capobj;
 	PyArg_ParseTuple(args, "O!", &PyCapsule_Type, &capobj);
 
 	twit_multi_axis* twit = (twit_multi_axis*)PyCapsule_GetPointer(capobj, "twit_multi_axis");
-	printf("unpack_twit_multi_axis: ptr is 0x%p  length is %lld\n", twit, twit->length);
+	//printf("unpack_twit_multi_axis: ptr is 0x%p  length is %lld\n", twit, twit->length);
 
 	PyObject* rslt = PyTuple_New(twit->length + 1);
 	PyTuple_SetItem(rslt, 0, PyLong_FromLongLong(twit->length));
 	for (INT64 i = 0; i < twit->length; i++) {
 		twit_single_axis* ax = twit->axs[i];
-		printf("ax length is %lld\n", ax->length);
+		//printf("ax length is %lld\n", ax->length);
 		PyObject* axres = PyTuple_New(4);
 		PyTuple_SetItem(axres, 0, PyLong_FromLongLong(ax->length));
 

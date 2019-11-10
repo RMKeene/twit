@@ -13,29 +13,29 @@ class TestTwitc(unittest.TestCase):
         pass
     
     def test_AA_interp(self):
-        self.assertAlmostEqual(twitc.twit_interp(0, 10, 0.0, 5.0, 0), 0.0)
-        self.assertAlmostEqual(twitc.twit_interp(0, 10, 0.0, 5.0, 11), 5.5)
-        self.assertAlmostEqual(twitc.twit_interp(10, 0, 0.0, 5.0, 1), 4.5)
+        self.assertAlmostEqual(twit_interp(0, 10, 0.0, 5.0, 0), 0.0)
+        self.assertAlmostEqual(twit_interp(0, 10, 0.0, 5.0, 11), 5.5)
+        self.assertAlmostEqual(twit_interp(10, 0, 0.0, 5.0, 1), 4.5)
 
-        self.assertAlmostEqual(twitc.twit_interp(10, 0, 5.0, 0.0, 10), 5.0)
-        self.assertAlmostEqual(twitc.twit_interp(10, 0, 5.0, 0.0, 1), 0.5)
-        self.assertAlmostEqual(twitc.twit_interp(0, 0, 1.0, 5.0, 11), 1.0)
+        self.assertAlmostEqual(twit_interp(10, 0, 5.0, 0.0, 10), 5.0)
+        self.assertAlmostEqual(twit_interp(10, 0, 5.0, 0.0, 1), 0.5)
+        self.assertAlmostEqual(twit_interp(0, 0, 1.0, 5.0, 11), 1.0)
 
         pass
 
     def test_AAM_interp(self):
-        self.assertFalse(twitc.outside_range(0, 10, 5))
-        self.assertFalse(twitc.outside_range(0, 10, 10))
-        self.assertFalse(twitc.outside_range(0, 10, 0))
-        self.assertFalse(twitc.outside_range(10, 0, 5))
-        self.assertFalse(twitc.outside_range(10, 0, 10))
-        self.assertFalse(twitc.outside_range(10, 0, 0))
-        self.assertTrue(twitc.outside_range(0, 10, -5))
-        self.assertTrue(twitc.outside_range(0, 10, 11))
-        self.assertTrue(twitc.outside_range(0, 10, -1))
-        self.assertTrue(twitc.outside_range(10, 0, 500))
-        self.assertFalse(twitc.outside_range(10, 0, 3))
-        self.assertFalse(twitc.outside_range(10, 0, 2))
+        self.assertFalse(outside_range(0, 10, 5))
+        self.assertFalse(outside_range(0, 10, 10))
+        self.assertFalse(outside_range(0, 10, 0))
+        self.assertFalse(outside_range(10, 0, 5))
+        self.assertFalse(outside_range(10, 0, 10))
+        self.assertFalse(outside_range(10, 0, 0))
+        self.assertTrue(outside_range(0, 10, -5))
+        self.assertTrue(outside_range(0, 10, 11))
+        self.assertTrue(outside_range(0, 10, -1))
+        self.assertTrue(outside_range(10, 0, 500))
+        self.assertFalse(outside_range(10, 0, 3))
+        self.assertFalse(outside_range(10, 0, 2))
 
         pass
 
@@ -154,8 +154,6 @@ class TestTwitc(unittest.TestCase):
         pass
 
     def test_HA_apply_twit(self):
-        print()
-        #
         t1 = np.ones((5))
         t2 = np.ones((5))
         # Here params are n_dims, twit_int_array (quads), twit_double_array (pairs), src, dst, preclear src
@@ -225,7 +223,7 @@ class TestTwitc(unittest.TestCase):
         t1[3, 2, 1] = 0.5
         t2 = np.ones((3, 5, 1))
         #t = twit(([(1,3), (0,2), (0.9, 0.5)], [(2, 3), (0,1), (1.0, 1.0)], [(0,2), (0,0), (1.0, 1.0)]))
-        print("-----------------------------------------------------")
+        #print("-----------------------------------------------------")
         twitc.make_and_apply_twit(3, np.array([1, 3, 0, 2, 2, 3, 0, 1, 0, 2, 0, 0], dtype=np.int64),  np.array([0.9, 0.5, 1.0, 1.0, 1.0, 1.0], dtype=np.float64), t1, t2, 1)
         
         a = [[[0.9], [0.9], [1.], [1.], [1.]], 
