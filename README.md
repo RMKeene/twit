@@ -1,6 +1,7 @@
 # TWIT - Tensor Weighted Interpolative Transfer
 
 (This is changeing quite a bit due to the port to C so python can call multithreaded C functions for TWIT.  Stay tuned....  10/19/2019 RK)
+(Updated 11/12/2019 - C code works well. 200x faster than pure python code.)
 
 Richard Keene September 2, 2019
 python PtPI package https://pypi.org/project/twit-rkeene/
