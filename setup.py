@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="twit",
-    version="0.0.9",
+    version="0.0.10",
     author="Richard Keene",
     author_email="rmkeene@gmail.com",
     description="Tensor Weighted Interpolative Transfer",
