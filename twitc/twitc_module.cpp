@@ -1,8 +1,25 @@
 #include <Python.h>
 #include <Windows.h>
 #include <cmath>
+#include <thread>
+#include <mutex>
+#include <chrono>
+#include <condition_variable>
 
 #include <numpy/arrayobject.h>
+
+int twit_thread_count = 1;
+int twit_thread_mask = 1;
+std::mutex** twit_mtxs;
+// 0 means not processing, 1 means busy.
+std::condition_variable** twit_thread_mutex_cvars;
+int* twit_thread_mutex_counts;
+std::thread** twit_threads = NULL;
+// N is the index in the mtxs and threads arrays.
+void twit_thread_loop(int N);
+void twit_thread_kickoff_all_loops();
+void twit_thread_wait_for_all_loops_to_finish();
+void twit_apply_MT_sequencer();
 
 struct range_series {
 	INT64 length;
@@ -33,7 +50,11 @@ bool _outside_range(INT64 start, INT64 end, INT64 idx);
 range_series* _find_range_series_multipliers(INT64 narrow_range_start, INT64 narrow_range_end, INT64 wide_range_start, INT64 wide_range_end, INT64 narrow_idx);
 twit_single_axis* _compute_twit_single_dimension(INT64 src_start, INT64 src_end, INT64 dst_start, INT64 dst_end, double w_start, double w_end);
 twit_multi_axis* _compute_twit_multi_dimension(INT64 n_dims, INT64 const* const twit_i, double const* const twit_w);
+
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear);
+void _apply_twit_single_thread(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear);
+void _apply_twit_multi_thread(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear);
+
 void _make_and_apply_twit(INT64 n_dims, double* t1, INT64* t1_dims, double* t2, INT64* t2dims, INT64* twit_i, double* twit_w, INT64 preclear);
 void twit_multi_axis_destructor(PyObject* obj);
 
@@ -74,6 +95,60 @@ PyMODINIT_FUNC PyInit_twitc() {
 	//printf("Init TWITC\n");
 	import_array();
 	return PyModule_Create(&twitc_module);
+}
+
+inline INT64 twit_set_thread_count(INT64 tc) {
+	if (twit_threads != NULL) {
+		printf("Invalid TWIT thread call.  twit_set_thread_count may only be called once, usually at startup.\n");
+		return 0;
+	}
+
+	int m = 0x001;
+	if (tc == 1) {
+		m = 0x001;
+	}
+	else if (tc == 2) {
+		m = 0x001;
+	}
+	else if (tc == 4) {
+		m = 0x003;
+	}
+	else if (tc == 8) {
+		m = 0x007;
+	}
+	else if (tc == 16) {
+		m = 0x00F;
+	}
+	else if (tc == 32) {
+		m = 0x01F;
+	}
+	else if (tc == 64) {
+		m = 0x03F;
+	}
+	else if (tc == 128) {
+		m = 0x07F;
+	}
+	else if (tc == 256) {
+		m = 0x0FF;
+	}
+	else {
+		printf("Invalid TWIT thread count.  Must be between 1 and 255 and a power of 2.  E.g. 1,2,4,8,16 etc.  Not changed.\n");
+		return 0;
+	}
+
+	twit_thread_count = tc;
+	twit_thread_mask = m;
+	twit_threads = (std::thread**)PyMem_Malloc(sizeof(std::thread*) * twit_thread_count);
+	twit_thread_mutex_cvars = (std::condition_variable**)PyMem_Malloc(sizeof(std::condition_variable*) * twit_thread_count);
+	twit_thread_mutex_counts = (int*)PyMem_Malloc(sizeof(int) * twit_thread_count);
+	twit_mtxs = (std::mutex**)PyMem_Malloc(sizeof(std::mutex*) * twit_thread_count);
+	for (int i = 0; i < twit_thread_count; i++) {
+		twit_mtxs[i] = new std::mutex();
+		twit_thread_mutex_counts[i] = 0;
+		twit_thread_mutex_cvars[i] = new std::condition_variable();
+		twit_threads[i] = new std::thread(twit_thread_loop, i);
+	}
+	return 1;
 }
 
 /// Returns either +1 or -1, if x is 0 then returns +1
@@ -569,6 +644,20 @@ void _make_and_apply_twit(const INT64 n_dims, double const* const t1, INT64 cons
 }
 
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
+	if (twit_thread_count <= 1) {
+		_apply_twit_single_thread(twit, t1, t1_dims, t2, t2_dims, preclear);
+	}
+	else {
+		_apply_twit_multi_thread(twit, t1, t1_dims, t2, t2_dims, preclear);
+	}
+
+}
+
+void _apply_twit_multi_thread(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
+
+}
+
+void _apply_twit_single_thread(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear) {
 	bool dbg = false;
 	if (dbg) printf("TWIT  _apply_twit  ");
 	if (twit == NULL) throw 1;
@@ -1056,4 +1145,70 @@ PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
 	Py_IncRef(Py_True);
 	return Py_True;
 
+}
+
+void twit_apply_MT_sequencer() {
+	printf("twit_apply_MT_sequencer\n");
+	twit_thread_kickoff_all_loops();
+	twit_thread_wait_for_all_loops_to_finish();
+	printf("twit_apply_MT_sequencer DONE\n");
+}
+
+void twit_apply_MT(int N) {
+	printf("Thread %d start\n", N);
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+
+	// Call _twit_apply_MT here
+
+	printf("Thread %d end\n", N);
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+// This loop is what each thread run in for MT processing if enabled.
+// It waits for the mutex, then processes it's interleaved destination rows of data.
+// N is the thread index in mtxs and threads arrays of pointers.
+// Used by _twit_apply_MT
+void twit_thread_loop(int N) {
+	// The outer control loop in the main thread will set twit_thread_mutex_counts[N] to 1
+	// and then notify_one()
+	while (twit_mtxs[N] != NULL) {
+		// Wait for twit_thread_mutex_counts[N] do increment to 1
+		{
+			std::unique_lock<std::mutex> lock(*(twit_mtxs[N]));
+			while (twit_thread_mutex_counts[N] == 0) {
+				twit_thread_mutex_cvars[N]->wait(lock);
+			}
+		}
+		// Apply twit and set twit_thread_mutex_counts[N] back to 0
+		{
+			twit_apply_MT(N);
+			// Signal to main thread I'm done processing.
+			std::unique_lock<std::mutex> lock(*(twit_mtxs[N]));
+			twit_thread_mutex_counts[N] = 0;
+			twit_thread_mutex_cvars[N]->notify_one();
+		}
+	}
+}
+
+void twit_thread_kickoff_all_loops() {
+	for (int i = 0; i < twit_thread_count; i++) {
+		{
+			std::unique_lock<std::mutex> lock(*(twit_mtxs[i]));
+			twit_thread_mutex_counts[i] = 1;
+			twit_thread_mutex_cvars[i]->notify_one();
+		}
+	}
+}
+
+void twit_thread_wait_for_all_loops_to_finish() {
+	for (int i = 0; i < twit_thread_count; i++) {
+		{
+			std::unique_lock<std::mutex> lock(*(twit_mtxs[i]));
+			while (twit_thread_mutex_counts[i] == 1) {
+				// While waiting the function wait automatically releases the lock
+				// and re-acquires it when signaled to via notify_one().
+				twit_thread_mutex_cvars[i]->wait(lock);
+			}
+		}
+	}
 }
