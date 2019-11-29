@@ -55,6 +55,8 @@ def scale_image_C_code():
     start = time.time()
     dest = np.zeros((100, 200, 3), dtype=np.float64)
 
+    twitc.set_thread_count(8);
+
     # twitc.make_and_apply_twit(3, np.array([0, np_im.shape[0] - 1, 0, np_im.shape[1] - 1, 0, np_im.shape[2] - 1, 0, 99, 0, 199, 0, 2], dtype=np.int64),  np.array([0.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float64), np_im, dest, 0)
     twt = twitc.compute_twit_multi_dimension(3, np.array([0, np_im.shape[0] - 1, 0, 99, 0, np_im.shape[1] - 1, 0, 199, 0, np_im.shape[2] - 1, 0, 2], dtype=np.int64),  np.array([0.0, 1.0, 0.0, 1.0, 1.0, 1.0], dtype=np.float64))
     # t = twitc.unpack_twit_multi_axis(twt)
@@ -62,9 +64,9 @@ def scale_image_C_code():
     pc = 1
     print("Start apply twit loop %d iterations with preclear %d" % (N, pc))
     for i in range(N):
-        twitc.apply_twit(twt, np_im, dest, 1)
+        twitc.apply_twit(twt, np_im, dest, pc)
     end = time.time()
-    print("Time elapsed: %d sec." % (end - start))
+    print("Time elapsed: %d sec.  %f milliseconds per twit" % (end - start, float(end - start) * 1000.0  / float(N)))
     print("End apply twit loop")
     new_im = Image.fromarray(dest.astype(np.uint8))
 
@@ -76,6 +78,6 @@ def scale_image_C_code():
 if __name__ == '__main__':
     print("Scale Image with twit sample program.")
     
-    scale_image()
+    #scale_image()
     
     scale_image_C_code()
