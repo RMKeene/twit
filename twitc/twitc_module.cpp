@@ -64,7 +64,7 @@ twit_thread_bundle** twit_thread_bundles;
 void twit_thread_loop(int N);
 void twit_thread_kickoff_all_loops();
 void twit_thread_wait_for_all_loops_to_finish();
-void twit_apply_MT_sequencer();
+void twit_apply_MT_sequencer(twit_processing_context* ctx);
 
 // Must match the python code values.
 const int TWIT_FAN_SAME = 0;
@@ -79,8 +79,8 @@ twit_single_axis* _compute_twit_single_dimension(INT64 src_start, INT64 src_end,
 twit_multi_axis* _compute_twit_multi_dimension(INT64 n_dims, INT64 const* const twit_i, double const* const twit_w);
 
 void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT64 const* const t1_dims, double* const t2, INT64 const* const t2_dims, const INT64 preclear);
-void _apply_twit_single_thread(twit_processing_context * ctx);
-void _apply_twit_multi_thread(twit_processing_context * ctx);
+void _apply_twit_single_thread(twit_processing_context* ctx);
+void _apply_twit_multi_thread(twit_processing_context* ctx);
 
 void _make_and_apply_twit(INT64 n_dims, double* t1, INT64* t1_dims, double* t2, INT64* t2dims, INT64* twit_i, double* twit_w, INT64 preclear);
 void twit_multi_axis_destructor(PyObject* obj);
@@ -724,7 +724,7 @@ void _apply_twit(twit_multi_axis const* const twit, double const* const t1, INT6
 	}
 	else {
 		// Only allow one context at a time.
-		if(dbg) twit_log("_apply_twit: Locking\n");
+		if (dbg) twit_log("_apply_twit: Locking\n");
 		std::lock_guard<std::recursive_mutex> guard(twit_mt_mutex);
 		if (dbg) twit_log("_apply_twit: lock ok\n");
 		//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -759,7 +759,7 @@ float axis_quality(int total_axis_count, int axis_index, int axis_length) {
 		if (dbg) twit_log("Axis %d of %d. Axis length %d, too short, skipped\n", axis_index, total_axis_count, axis_length);
 		return -1;
 	}
-	
+
 	float aq = pow((float)axis_length, 1.1f) + 100.0 * pow((float)(total_axis_count - axis_index), 2.0f);
 	if (dbg) twit_log("Axis %d of %d. Axis length %d, quality %f\n", axis_index, total_axis_count, axis_length, aq);
 	return aq;
@@ -781,6 +781,8 @@ int find_best_threading_axis(twit_multi_axis const* const twit, INT64 const* con
 }
 
 void copy_ctx_to_threads(twit_processing_context* ctx) {
+	bool dbg = false;
+	if (dbg) twit_log("copy_ctx_to_threads:\n");
 	for (int i = 0; i < twit_thread_count; i++) {
 		memcpy(&twit_thread_bundles[i]->ctx, ctx, sizeof(twit_processing_context));
 	}
@@ -806,27 +808,25 @@ void _apply_twit_multi_thread(twit_processing_context* ctx) {
 	}
 
 	if (twit_threading_axis == 0) {
-		copy_ctx_to_threads(ctx);
-		if (dbg) twit_log("_apply_twit_multi_thread: after copy\n");
-		twit_apply_MT_sequencer();
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 1) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 2) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 3) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 4) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 5) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else if (twit_threading_axis == 6) {
-		_apply_twit_single_thread(ctx);
+		twit_apply_MT_sequencer(ctx);
 	}
 	else {
 		// Punt, not threaded for that use case yet.
@@ -837,7 +837,7 @@ void _apply_twit_multi_thread(twit_processing_context* ctx) {
 	clear_ctx_from_threads();
 }
 
-void _apply_twit_single_thread(twit_processing_context * ctx) {
+void _apply_twit_single_thread(twit_processing_context* ctx) {
 	bool dbg = false;
 	if (dbg) twit_log("TWIT  _apply_twit  ");
 	if (ctx->twit == NULL) throw 1;
@@ -1152,7 +1152,7 @@ void _apply_twit_single_thread(twit_processing_context * ctx) {
 	}
 }
 
-// Apply twit multithreadded, axis 0 is threadded.
+// Apply twit multithreadded, axis 0 is threaded.
 void _apply_twit_MT_axis_0(twit_processing_context* ctx, int N) {
 	bool dbg = false;
 	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_0  ");
@@ -1502,6 +1502,1202 @@ void _apply_twit_MT_axis_0(twit_processing_context* ctx, int N) {
 	}
 }
 
+void _apply_twit_MT_axis_1(twit_processing_context* ctx, int N) {
+	bool dbg = false;
+	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_1  ");
+	if (ctx->twit == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_1  NULL twit");
+		throw 1;
+	}
+	// Src
+	if (ctx->t1 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_1  NULL t1");
+		throw 2;
+	}
+	// Dst
+	if (ctx->t2 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_1  NULL t2");
+		throw 3;
+	}
+
+	// Speed up some references.
+	twit_multi_axis const* const twit = ctx->twit;
+	double const* const t1 = ctx->t1;
+	INT64 const* const t1_dims = ctx->t1_dims;
+	double* const t2 = ctx->t2;
+	INT64 const* const t2_dims = ctx->t2_dims;
+	const INT64 preclear = ctx->preclear;
+
+
+	// Fast constants. This entire method tries to save every cpu cycle possible.
+	// Premature optimization is the root of all evil, yada yada yada.
+	const INT64 L = twit->length;
+	if (dbg) twit_log("L = %lld\n", L);
+
+	if (L <= 1) throw 4;
+
+	const INT64 L0 = twit->axs[0]->length;
+	// These three are the source indicies, dset indicies, and weight triples along a given axis.
+	// Generated by compute_twit_single_dimension()
+	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
+	const INT64* dstidxs0 = twit->axs[0]->dstidxs;
+	const double* ws0 = twit->axs[0]->weights;
+
+	const INT64* srcidxs1 = twit->axs[1]->srcidxs;
+	const INT64* dstidxs1 = twit->axs[1]->dstidxs;
+	const double* ws1 = twit->axs[1]->weights;
+	const INT64 L1 = twit->axs[1]->length;
+
+	if (L == 2) {
+		if (dbg) twit_log("_apply_twit  2D\n");
+		// This is how far a single incrmenet in the next higher axis advances along the source
+		// or destination ndarrays.
+		const INT64 srcadvance0 = t1_dims[1];
+		const INT64 dstadvance0 = t2_dims[1];
+
+		// Note: Dimensions are innermost last in the lists!
+		// So dim[0] (first dim) changes the slowest and dim[L - 1] (last dim) changes the fastest.
+
+		if (preclear) {
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					if ((srcidxs1[i1] & twit_thread_mask) == N) {
+						t2[dstidxs1[i1] + doff0] = 0.0;
+					}
+				}
+			}
+		}
+		for (INT64 i0 = 0; i0 < L0; i0++) {
+			const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+			const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+			const double w0 = ws0[i0];
+			for (INT64 i1 = 0; i1 < L1; i1++) {
+				if ((srcidxs1[i1] & twit_thread_mask) == N) {
+					t2[dstidxs1[i1] + doff0] += t1[srcidxs1[i1] + soff0] * w0 * ws1[i1];
+
+				}
+			}
+		}
+		return;
+	}
+	else {
+		const INT64* srcidxs2 = twit->axs[2]->srcidxs;
+		const INT64* dstidxs2 = twit->axs[2]->dstidxs;
+		const double* ws2 = twit->axs[2]->weights;
+		const INT64 L2 = twit->axs[2]->length;
+
+		if (L == 3) {
+			if (dbg) twit_log("_apply_twit  3D\n");
+			const INT64 srcadvance1 = t1_dims[2];
+			const INT64 dstadvance1 = t2_dims[2];
+			const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+			const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+			if (preclear) {
+				if (dbg) twit_log("  preclear\n");
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						if ((srcidxs1[i1] & twit_thread_mask) == N) {
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+							for (INT64 i2 = 0; i2 < L2; i2++) {
+								t2[dstidxs2[i2] + doff1] = 0.0;
+							}
+						}
+					}
+				}
+			}
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				if (dbg) twit_log("  i0 %lld\n", i0);
+				const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				const double w0 = ws0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					if ((srcidxs1[i1] & twit_thread_mask) == N) {
+						if (i1 == 0 || i1 == L1 - 1) {
+							if (dbg) twit_log("    i1 %lld\n", i1);
+						}
+						const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						const double w1 = ws1[i1] * w0;
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							if (i2 == 0 || i2 == L2 - 1) {
+								//twit_log("      i2 %lld\n", i2);
+								//twit_log("L %lld, %lld %lld  i %lld %lld %lld\n", L0, L1, L2, i0, i1, i2);
+							}
+							t2[dstidxs2[i2] + doff1] += t1[srcidxs2[i2] + soff1] * w1 * ws2[i2];
+						}
+					}
+				}
+			}
+			if (dbg) twit_log("  return ==========================================\n");
+			return;
+		}
+		else {
+			const INT64* srcidxs3 = twit->axs[3]->srcidxs;
+			const INT64* dstidxs3 = twit->axs[3]->dstidxs;
+			const double* ws3 = twit->axs[3]->weights;
+			const INT64 L3 = twit->axs[3]->length;
+			if (L == 4) {
+				if (dbg) twit_log("_apply_twit  4D\n");
+				const INT64 srcadvance2 = t1_dims[3];
+				const INT64 dstadvance2 = t2_dims[3];
+				const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+				const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+				const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+				const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+				if (preclear) {
+					for (INT64 i0 = 0; i0 < L0; i0++) {
+						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+						for (INT64 i1 = 0; i1 < L1; i1++) {
+							if ((srcidxs1[i1] & twit_thread_mask) == N) {
+								const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+								for (INT64 i2 = 0; i2 < L2; i2++) {
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+									for (INT64 i3 = 0; i3 < L3; i3++) {
+										t2[dstidxs3[i3] + doff2] = 0.0;
+									}
+								}
+							}
+						}
+					}
+				}
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					const double w0 = ws0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						if ((srcidxs1[i1] & twit_thread_mask) == N) {
+							const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+							const double w1 = ws1[i1] * w0;
+							for (INT64 i2 = 0; i2 < L2; i2++) {
+								const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+								const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+								const double w2 = ws2[i2] * w1;
+								for (INT64 i3 = 0; i3 < L3; i3++) {
+									t2[dstidxs3[i3] + doff2] += t1[srcidxs3[i3] + soff2] * w2 * ws3[i3];
+								}
+							}
+						}
+					}
+				}
+				return;
+			}
+			else {
+				const INT64* srcidxs4 = twit->axs[4]->srcidxs;
+				const INT64* dstidxs4 = twit->axs[4]->dstidxs;
+				const double* ws4 = twit->axs[4]->weights;
+				const INT64 L4 = twit->axs[4]->length;
+				if (L == 5) {
+					if (dbg) twit_log("_apply_twit  5D\n");
+					const INT64 srcadvance3 = t1_dims[4];
+					const INT64 dstadvance3 = t2_dims[4];
+					const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+					const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+					const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+					const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+					const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+					const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+					if (preclear) {
+						for (INT64 i0 = 0; i0 < L0; i0++) {
+							const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+							for (INT64 i1 = 0; i1 < L1; i1++) {
+								if ((srcidxs1[i1] & twit_thread_mask) == N) {
+									const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+									for (INT64 i2 = 0; i2 < L2; i2++) {
+										const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+										for (INT64 i3 = 0; i3 < L3; i3++) {
+											const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+											for (INT64 i4 = 0; i4 < L4; i4++) {
+												t2[dstidxs4[i4] + doff3] = 0.0;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					for (INT64 i0 = 0; i0 < L0; i0++) {
+						const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+						const double w0 = ws0[i0];
+						for (INT64 i1 = 0; i1 < L1; i1++) {
+							if ((srcidxs1[i1] & twit_thread_mask) == N) {
+								const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+								const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+								const double w1 = ws1[i1] * w0;
+								for (INT64 i2 = 0; i2 < L2; i2++) {
+									const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+									const double w2 = ws2[i2] * w1;
+									for (INT64 i3 = 0; i3 < L3; i3++) {
+										const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+										const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+										const double w3 = ws3[i3] * w2;
+										for (INT64 i4 = 0; i4 < L4; i4++) {
+											t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4];
+										}
+									}
+								}
+							}
+						}
+					}
+					return;
+				}
+				else {
+					const INT64* srcidxs5 = twit->axs[5]->srcidxs;
+					const INT64* dstidxs5 = twit->axs[5]->dstidxs;
+					const double* ws5 = twit->axs[5]->weights;
+					const INT64 L5 = twit->axs[5]->length;
+					if (L == 6) {
+						if (dbg) twit_log("_apply_twit  6D\n");
+						const INT64 srcadvance4 = t1_dims[5];
+						const INT64 dstadvance4 = t2_dims[5];
+						const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
+						const INT64 dstadvance3 = t2_dims[4] * dstadvance4;
+						const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+						const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+						const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+						const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+						const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+						const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+						if (preclear) {
+							for (INT64 i0 = 0; i0 < L0; i0++) {
+								const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+								for (INT64 i1 = 0; i1 < L1; i1++) {
+									if ((srcidxs1[i1] & twit_thread_mask) == N) {
+										const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+										for (INT64 i2 = 0; i2 < L2; i2++) {
+											const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+											for (INT64 i3 = 0; i3 < L3; i3++) {
+												const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+												for (INT64 i4 = 0; i4 < L4; i4++) {
+													const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+													for (INT64 i5 = 0; i5 < L5; i5++) {
+														t2[dstidxs5[i5] + doff4] = 0.0;
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+						for (INT64 i0 = 0; i0 < L0; i0++) {
+							const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+							const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+							const double w0 = ws0[i0];
+							for (INT64 i1 = 0; i1 < L1; i1++) {
+								if ((srcidxs1[i1] & twit_thread_mask) == N) {
+									const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+									const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+									const double w1 = ws1[i1] * w0;
+									for (INT64 i2 = 0; i2 < L2; i2++) {
+										const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+										const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+										const double w2 = ws2[i2] * w1;
+										for (INT64 i3 = 0; i3 < L3; i3++) {
+											const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+											const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+											const double w3 = ws3[i3] * w2;
+											for (INT64 i4 = 0; i4 < L4; i4++) {
+												const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+												const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+												const double w4 = ws4[i4] * w3;
+												for (INT64 i5 = 0; i5 < L5; i5++) {
+													t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+						return;
+					}
+					else {
+						// Tsk tsk tsk, unimplemented number of dimensions.
+						// They're all custom for each supported dimension count.
+						// May implement a slower generic size handler for large numbers of dimensions?
+						twit_log("_apply_twit  UNSUPPORTED TWIT Dimensions count.  Max is 6 Dimensions.\n");
+						throw 42;
+					}
+				}
+			}
+		}
+	}
+}
+
+void _apply_twit_MT_axis_2(twit_processing_context* ctx, int N) {
+	bool dbg = false;
+	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_2  ");
+	if (ctx->twit == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_2  NULL twit");
+		throw 1;
+	}
+	// Src
+	if (ctx->t1 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_2  NULL t1");
+		throw 2;
+	}
+	// Dst
+	if (ctx->t2 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_2  NULL t2");
+		throw 3;
+	}
+
+	// Speed up some references.
+	twit_multi_axis const* const twit = ctx->twit;
+	double const* const t1 = ctx->t1;
+	INT64 const* const t1_dims = ctx->t1_dims;
+	double* const t2 = ctx->t2;
+	INT64 const* const t2_dims = ctx->t2_dims;
+	const INT64 preclear = ctx->preclear;
+
+
+	// Fast constants. This entire method tries to save every cpu cycle possible.
+	// Premature optimization is the root of all evil, yada yada yada.
+	const INT64 L = twit->length;
+	if (dbg) twit_log("L = %lld\n", L);
+
+	if (L <= 2) throw 4;
+
+	const INT64 L0 = twit->axs[0]->length;
+	// These three are the source indicies, dset indicies, and weight triples along a given axis.
+	// Generated by compute_twit_single_dimension()
+	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
+	const INT64* dstidxs0 = twit->axs[0]->dstidxs;
+	const double* ws0 = twit->axs[0]->weights;
+
+	const INT64* srcidxs1 = twit->axs[1]->srcidxs;
+	const INT64* dstidxs1 = twit->axs[1]->dstidxs;
+	const double* ws1 = twit->axs[1]->weights;
+	const INT64 L1 = twit->axs[1]->length;
+
+	const INT64* srcidxs2 = twit->axs[2]->srcidxs;
+	const INT64* dstidxs2 = twit->axs[2]->dstidxs;
+	const double* ws2 = twit->axs[2]->weights;
+	const INT64 L2 = twit->axs[2]->length;
+
+	if (L == 3) {
+		if (dbg) twit_log("_apply_twit  3D\n");
+		const INT64 srcadvance1 = t1_dims[2];
+		const INT64 dstadvance1 = t2_dims[2];
+		const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+		const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+		if (preclear) {
+			if (dbg) twit_log("  preclear\n");
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						if ((srcidxs2[i2] & twit_thread_mask) == N) {
+							t2[dstidxs2[i2] + doff1] = 0.0;
+						}
+					}
+				}
+			}
+		}
+		for (INT64 i0 = 0; i0 < L0; i0++) {
+			if (dbg) twit_log("  i0 %lld\n", i0);
+			const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+			const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+			const double w0 = ws0[i0];
+			for (INT64 i1 = 0; i1 < L1; i1++) {
+				const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+				const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+				const double w1 = ws1[i1] * w0;
+				for (INT64 i2 = 0; i2 < L2; i2++) {
+					if ((srcidxs2[i2] & twit_thread_mask) == N) {
+						t2[dstidxs2[i2] + doff1] += t1[srcidxs2[i2] + soff1] * w1 * ws2[i2];
+					}
+				}
+			}
+		}
+		if (dbg) twit_log("  return ==========================================\n");
+		return;
+	}
+	else {
+		const INT64* srcidxs3 = twit->axs[3]->srcidxs;
+		const INT64* dstidxs3 = twit->axs[3]->dstidxs;
+		const double* ws3 = twit->axs[3]->weights;
+		const INT64 L3 = twit->axs[3]->length;
+		if (L == 4) {
+			if (dbg) twit_log("_apply_twit  4D\n");
+			const INT64 srcadvance2 = t1_dims[3];
+			const INT64 dstadvance2 = t2_dims[3];
+			const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+			const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+			const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+			const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+			if (preclear) {
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							if ((srcidxs2[i2] & twit_thread_mask) == N) {
+								const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+								for (INT64 i3 = 0; i3 < L3; i3++) {
+									t2[dstidxs3[i3] + doff2] = 0.0;
+								}
+							}
+						}
+					}
+				}
+			}
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				const double w0 = ws0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					const double w1 = ws1[i1] * w0;
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						if ((srcidxs2[i2] & twit_thread_mask) == N) {
+							const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+							const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+							const double w2 = ws2[i2] * w1;
+							for (INT64 i3 = 0; i3 < L3; i3++) {
+								t2[dstidxs3[i3] + doff2] += t1[srcidxs3[i3] + soff2] * w2 * ws3[i3];
+							}
+						}
+					}
+				}
+			}
+			return;
+		}
+		else {
+			const INT64* srcidxs4 = twit->axs[4]->srcidxs;
+			const INT64* dstidxs4 = twit->axs[4]->dstidxs;
+			const double* ws4 = twit->axs[4]->weights;
+			const INT64 L4 = twit->axs[4]->length;
+			if (L == 5) {
+				if (dbg) twit_log("_apply_twit  5D\n");
+				const INT64 srcadvance3 = t1_dims[4];
+				const INT64 dstadvance3 = t2_dims[4];
+				const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+				const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+				const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+				const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+				const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+				const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+				if (preclear) {
+					for (INT64 i0 = 0; i0 < L0; i0++) {
+						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+						for (INT64 i1 = 0; i1 < L1; i1++) {
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+							for (INT64 i2 = 0; i2 < L2; i2++) {
+								if ((srcidxs2[i2] & twit_thread_mask) == N) {
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+									for (INT64 i3 = 0; i3 < L3; i3++) {
+										const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+										for (INT64 i4 = 0; i4 < L4; i4++) {
+											t2[dstidxs4[i4] + doff3] = 0.0;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					const double w0 = ws0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						const double w1 = ws1[i1] * w0;
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							if ((srcidxs2[i2] & twit_thread_mask) == N) {
+								const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+								const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+								const double w2 = ws2[i2] * w1;
+								for (INT64 i3 = 0; i3 < L3; i3++) {
+									const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+									const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+									const double w3 = ws3[i3] * w2;
+									for (INT64 i4 = 0; i4 < L4; i4++) {
+										t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4];
+									}
+								}
+							}
+						}
+					}
+				}
+				return;
+			}
+			else {
+				const INT64* srcidxs5 = twit->axs[5]->srcidxs;
+				const INT64* dstidxs5 = twit->axs[5]->dstidxs;
+				const double* ws5 = twit->axs[5]->weights;
+				const INT64 L5 = twit->axs[5]->length;
+				if (L == 6) {
+					if (dbg) twit_log("_apply_twit  6D\n");
+					const INT64 srcadvance4 = t1_dims[5];
+					const INT64 dstadvance4 = t2_dims[5];
+					const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
+					const INT64 dstadvance3 = t2_dims[4] * dstadvance4;
+					const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+					const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+					const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+					const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+					const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+					const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+					if (preclear) {
+						for (INT64 i0 = 0; i0 < L0; i0++) {
+							const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+							for (INT64 i1 = 0; i1 < L1; i1++) {
+								const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+								for (INT64 i2 = 0; i2 < L2; i2++) {
+									if ((srcidxs2[i2] & twit_thread_mask) == N) {
+										const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+										for (INT64 i3 = 0; i3 < L3; i3++) {
+											const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+											for (INT64 i4 = 0; i4 < L4; i4++) {
+												const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+												for (INT64 i5 = 0; i5 < L5; i5++) {
+													t2[dstidxs5[i5] + doff4] = 0.0;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					for (INT64 i0 = 0; i0 < L0; i0++) {
+						const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+						const double w0 = ws0[i0];
+						for (INT64 i1 = 0; i1 < L1; i1++) {
+							const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+							const double w1 = ws1[i1] * w0;
+							for (INT64 i2 = 0; i2 < L2; i2++) {
+								if ((srcidxs2[i2] & twit_thread_mask) == N) {
+									const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+									const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+									const double w2 = ws2[i2] * w1;
+									for (INT64 i3 = 0; i3 < L3; i3++) {
+										const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+										const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+										const double w3 = ws3[i3] * w2;
+										for (INT64 i4 = 0; i4 < L4; i4++) {
+											const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+											const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+											const double w4 = ws4[i4] * w3;
+											for (INT64 i5 = 0; i5 < L5; i5++) {
+												t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					return;
+				}
+				else {
+					// Tsk tsk tsk, unimplemented number of dimensions.
+					// They're all custom for each supported dimension count.
+					// May implement a slower generic size handler for large numbers of dimensions?
+					twit_log("_apply_twit  UNSUPPORTED TWIT Dimensions count.  Max is 6 Dimensions.\n");
+					throw 42;
+				}
+			}
+		}
+	}
+}
+
+void _apply_twit_MT_axis_3(twit_processing_context* ctx, int N) {
+	bool dbg = false;
+	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_3  ");
+	if (ctx->twit == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_3  NULL twit");
+		throw 1;
+	}
+	// Src
+	if (ctx->t1 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_3  NULL t1");
+		throw 2;
+	}
+	// Dst
+	if (ctx->t2 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_3  NULL t2");
+		throw 3;
+	}
+
+	// Speed up some references.
+	twit_multi_axis const* const twit = ctx->twit;
+	double const* const t1 = ctx->t1;
+	INT64 const* const t1_dims = ctx->t1_dims;
+	double* const t2 = ctx->t2;
+	INT64 const* const t2_dims = ctx->t2_dims;
+	const INT64 preclear = ctx->preclear;
+
+
+	// Fast constants. This entire method tries to save every cpu cycle possible.
+	// Premature optimization is the root of all evil, yada yada yada.
+	const INT64 L = twit->length;
+	if (dbg) twit_log("L = %lld\n", L);
+
+	if (L <= 3) throw 4;
+
+	const INT64 L0 = twit->axs[0]->length;
+	// These three are the source indicies, dset indicies, and weight triples along a given axis.
+	// Generated by compute_twit_single_dimension()
+	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
+	const INT64* dstidxs0 = twit->axs[0]->dstidxs;
+	const double* ws0 = twit->axs[0]->weights;
+
+	const INT64* srcidxs1 = twit->axs[1]->srcidxs;
+	const INT64* dstidxs1 = twit->axs[1]->dstidxs;
+	const double* ws1 = twit->axs[1]->weights;
+	const INT64 L1 = twit->axs[1]->length;
+
+	const INT64* srcidxs2 = twit->axs[2]->srcidxs;
+	const INT64* dstidxs2 = twit->axs[2]->dstidxs;
+	const double* ws2 = twit->axs[2]->weights;
+	const INT64 L2 = twit->axs[2]->length;
+
+	const INT64* srcidxs3 = twit->axs[3]->srcidxs;
+	const INT64* dstidxs3 = twit->axs[3]->dstidxs;
+	const double* ws3 = twit->axs[3]->weights;
+	const INT64 L3 = twit->axs[3]->length;
+	if (L == 4) {
+		if (dbg) twit_log("_apply_twit  4D\n");
+		const INT64 srcadvance2 = t1_dims[3];
+		const INT64 dstadvance2 = t2_dims[3];
+		const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+		const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+		const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+		const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+		if (preclear) {
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+						for (INT64 i3 = 0; i3 < L3; i3++) {
+							if ((srcidxs3[i3] & twit_thread_mask) == N) {
+								t2[dstidxs3[i3] + doff2] = 0.0;
+							}
+						}
+					}
+				}
+			}
+		}
+		for (INT64 i0 = 0; i0 < L0; i0++) {
+			const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+			const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+			const double w0 = ws0[i0];
+			for (INT64 i1 = 0; i1 < L1; i1++) {
+				const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+				const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+				const double w1 = ws1[i1] * w0;
+				for (INT64 i2 = 0; i2 < L2; i2++) {
+					const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+					const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+					const double w2 = ws2[i2] * w1;
+					for (INT64 i3 = 0; i3 < L3; i3++) {
+						if ((srcidxs3[i3] & twit_thread_mask) == N) {
+							t2[dstidxs3[i3] + doff2] += t1[srcidxs3[i3] + soff2] * w2 * ws3[i3];
+						}
+					}
+				}
+			}
+		}
+		return;
+	}
+	else {
+		const INT64* srcidxs4 = twit->axs[4]->srcidxs;
+		const INT64* dstidxs4 = twit->axs[4]->dstidxs;
+		const double* ws4 = twit->axs[4]->weights;
+		const INT64 L4 = twit->axs[4]->length;
+		if (L == 5) {
+			if (dbg) twit_log("_apply_twit  5D\n");
+			const INT64 srcadvance3 = t1_dims[4];
+			const INT64 dstadvance3 = t2_dims[4];
+			const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+			const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+			const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+			const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+			const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+			const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+			if (preclear) {
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+							for (INT64 i3 = 0; i3 < L3; i3++) {
+								if ((srcidxs3[i3] & twit_thread_mask) == N) {
+									const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+									for (INT64 i4 = 0; i4 < L4; i4++) {
+										t2[dstidxs4[i4] + doff3] = 0.0;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				const double w0 = ws0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					const double w1 = ws1[i1] * w0;
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+						const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+						const double w2 = ws2[i2] * w1;
+						for (INT64 i3 = 0; i3 < L3; i3++) {
+							if ((srcidxs3[i3] & twit_thread_mask) == N) {
+								const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+								const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+								const double w3 = ws3[i3] * w2;
+								for (INT64 i4 = 0; i4 < L4; i4++) {
+									t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4];
+								}
+							}
+						}
+					}
+				}
+			}
+			return;
+		}
+		else {
+			const INT64* srcidxs5 = twit->axs[5]->srcidxs;
+			const INT64* dstidxs5 = twit->axs[5]->dstidxs;
+			const double* ws5 = twit->axs[5]->weights;
+			const INT64 L5 = twit->axs[5]->length;
+			if (L == 6) {
+				if (dbg) twit_log("_apply_twit  6D\n");
+				const INT64 srcadvance4 = t1_dims[5];
+				const INT64 dstadvance4 = t2_dims[5];
+				const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
+				const INT64 dstadvance3 = t2_dims[4] * dstadvance4;
+				const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+				const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+				const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+				const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+				const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+				const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+				if (preclear) {
+					for (INT64 i0 = 0; i0 < L0; i0++) {
+						const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+						for (INT64 i1 = 0; i1 < L1; i1++) {
+							const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+							for (INT64 i2 = 0; i2 < L2; i2++) {
+								const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+								for (INT64 i3 = 0; i3 < L3; i3++) {
+									if ((srcidxs3[i3] & twit_thread_mask) == N) {
+										const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+										for (INT64 i4 = 0; i4 < L4; i4++) {
+											const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+											for (INT64 i5 = 0; i5 < L5; i5++) {
+												t2[dstidxs5[i5] + doff4] = 0.0;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					const double w0 = ws0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						const double w1 = ws1[i1] * w0;
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+							const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+							const double w2 = ws2[i2] * w1;
+							for (INT64 i3 = 0; i3 < L3; i3++) {
+								if ((srcidxs3[i3] & twit_thread_mask) == N) {
+									const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+									const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+									const double w3 = ws3[i3] * w2;
+									for (INT64 i4 = 0; i4 < L4; i4++) {
+										const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+										const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+										const double w4 = ws4[i4] * w3;
+										for (INT64 i5 = 0; i5 < L5; i5++) {
+											t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				return;
+			}
+			else {
+				// Tsk tsk tsk, unimplemented number of dimensions.
+				// They're all custom for each supported dimension count.
+				// May implement a slower generic size handler for large numbers of dimensions?
+				twit_log("_apply_twit  UNSUPPORTED TWIT Dimensions count.  Max is 6 Dimensions.\n");
+				throw 42;
+			}
+		}
+	}
+}
+
+void _apply_twit_MT_axis_4(twit_processing_context* ctx, int N) {
+	bool dbg = false;
+	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_4  ");
+	if (ctx->twit == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_4  NULL twit");
+		throw 1;
+	}
+	// Src
+	if (ctx->t1 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_4  NULL t1");
+		throw 2;
+	}
+	// Dst
+	if (ctx->t2 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_4  NULL t2");
+		throw 3;
+	}
+
+	// Speed up some references.
+	twit_multi_axis const* const twit = ctx->twit;
+	double const* const t1 = ctx->t1;
+	INT64 const* const t1_dims = ctx->t1_dims;
+	double* const t2 = ctx->t2;
+	INT64 const* const t2_dims = ctx->t2_dims;
+	const INT64 preclear = ctx->preclear;
+
+	// Fast constants. This entire method tries to save every cpu cycle possible.
+	// Premature optimization is the root of all evil, yada yada yada.
+	const INT64 L = twit->length;
+	if (dbg) twit_log("L = %lld\n", L);
+
+	if (L <= 4) throw 4;
+
+	const INT64 L0 = twit->axs[0]->length;
+	// These three are the source indicies, dset indicies, and weight triples along a given axis.
+	// Generated by compute_twit_single_dimension()
+	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
+	const INT64* dstidxs0 = twit->axs[0]->dstidxs;
+	const double* ws0 = twit->axs[0]->weights;
+
+
+	const INT64* srcidxs1 = twit->axs[1]->srcidxs;
+	const INT64* dstidxs1 = twit->axs[1]->dstidxs;
+	const double* ws1 = twit->axs[1]->weights;
+	const INT64 L1 = twit->axs[1]->length;
+
+	const INT64* srcidxs2 = twit->axs[2]->srcidxs;
+	const INT64* dstidxs2 = twit->axs[2]->dstidxs;
+	const double* ws2 = twit->axs[2]->weights;
+	const INT64 L2 = twit->axs[2]->length;
+
+	const INT64* srcidxs3 = twit->axs[3]->srcidxs;
+	const INT64* dstidxs3 = twit->axs[3]->dstidxs;
+	const double* ws3 = twit->axs[3]->weights;
+	const INT64 L3 = twit->axs[3]->length;
+
+	const INT64* srcidxs4 = twit->axs[4]->srcidxs;
+	const INT64* dstidxs4 = twit->axs[4]->dstidxs;
+	const double* ws4 = twit->axs[4]->weights;
+	const INT64 L4 = twit->axs[4]->length;
+	if (L == 5) {
+		if (dbg) twit_log("_apply_twit  5D\n");
+		const INT64 srcadvance3 = t1_dims[4];
+		const INT64 dstadvance3 = t2_dims[4];
+		const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+		const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+		const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+		const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+		const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+		const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+		if (preclear) {
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+						for (INT64 i3 = 0; i3 < L3; i3++) {
+							const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+							for (INT64 i4 = 0; i4 < L4; i4++) {
+								if ((srcidxs4[i4] & twit_thread_mask) == N) {
+									t2[dstidxs4[i4] + doff3] = 0.0;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		for (INT64 i0 = 0; i0 < L0; i0++) {
+			const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+			const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+			const double w0 = ws0[i0];
+			for (INT64 i1 = 0; i1 < L1; i1++) {
+				const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+				const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+				const double w1 = ws1[i1] * w0;
+				for (INT64 i2 = 0; i2 < L2; i2++) {
+					const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+					const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+					const double w2 = ws2[i2] * w1;
+					for (INT64 i3 = 0; i3 < L3; i3++) {
+						const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+						const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+						const double w3 = ws3[i3] * w2;
+						for (INT64 i4 = 0; i4 < L4; i4++) {
+							if ((srcidxs4[i4] & twit_thread_mask) == N) {
+								t2[dstidxs4[i4] + doff3] += t1[srcidxs4[i4] + soff3] * w3 * ws4[i4];
+							}
+						}
+					}
+				}
+			}
+		}
+		return;
+	}
+	else {
+		const INT64* srcidxs5 = twit->axs[5]->srcidxs;
+		const INT64* dstidxs5 = twit->axs[5]->dstidxs;
+		const double* ws5 = twit->axs[5]->weights;
+		const INT64 L5 = twit->axs[5]->length;
+		if (L == 6) {
+			if (dbg) twit_log("_apply_twit  6D\n");
+			const INT64 srcadvance4 = t1_dims[5];
+			const INT64 dstadvance4 = t2_dims[5];
+			const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
+			const INT64 dstadvance3 = t2_dims[4] * dstadvance4;
+			const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+			const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+			const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+			const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+			const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+			const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+			if (preclear) {
+				for (INT64 i0 = 0; i0 < L0; i0++) {
+					const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+					for (INT64 i1 = 0; i1 < L1; i1++) {
+						const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+						for (INT64 i2 = 0; i2 < L2; i2++) {
+							const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+							for (INT64 i3 = 0; i3 < L3; i3++) {
+								const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+								for (INT64 i4 = 0; i4 < L4; i4++) {
+									if ((srcidxs4[i4] & twit_thread_mask) == N) {
+										const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+										for (INT64 i5 = 0; i5 < L5; i5++) {
+											t2[dstidxs5[i5] + doff4] = 0.0;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				const double w0 = ws0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					const double w1 = ws1[i1] * w0;
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+						const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+						const double w2 = ws2[i2] * w1;
+						for (INT64 i3 = 0; i3 < L3; i3++) {
+							const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+							const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+							const double w3 = ws3[i3] * w2;
+							for (INT64 i4 = 0; i4 < L4; i4++) {
+								if ((srcidxs4[i4] & twit_thread_mask) == N) {
+									const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+									const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+									const double w4 = ws4[i4] * w3;
+									for (INT64 i5 = 0; i5 < L5; i5++) {
+										t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			return;
+		}
+		else {
+			// Tsk tsk tsk, unimplemented number of dimensions.
+			// They're all custom for each supported dimension count.
+			// May implement a slower generic size handler for large numbers of dimensions?
+			twit_log("_apply_twit  UNSUPPORTED TWIT Dimensions count.  Max is 6 Dimensions.\n");
+			throw 42;
+		}
+	}
+}
+
+void _apply_twit_MT_axis_5(twit_processing_context* ctx, int N) {
+	bool dbg = false;
+	if (dbg) twit_log("TWIT  _apply_twit_MT_axis_5  ");
+	if (ctx->twit == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_5  NULL twit");
+		throw 1;
+	}
+	// Src
+	if (ctx->t1 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_5  NULL t1");
+		throw 2;
+	}
+	// Dst
+	if (ctx->t2 == NULL) {
+		if (dbg) twit_log("TWIT  _apply_twit_MT_axis_5  NULL t2");
+		throw 3;
+	}
+
+	// Speed up some references.
+	twit_multi_axis const* const twit = ctx->twit;
+	double const* const t1 = ctx->t1;
+	INT64 const* const t1_dims = ctx->t1_dims;
+	double* const t2 = ctx->t2;
+	INT64 const* const t2_dims = ctx->t2_dims;
+	const INT64 preclear = ctx->preclear;
+
+
+	// Fast constants. This entire method tries to save every cpu cycle possible.
+	// Premature optimization is the root of all evil, yada yada yada.
+	const INT64 L = twit->length;
+	if (dbg) twit_log("L = %lld\n", L);
+
+	if (L <= 5) throw 4;
+
+	const INT64 L0 = twit->axs[0]->length;
+	// These three are the source indicies, dset indicies, and weight triples along a given axis.
+	// Generated by compute_twit_single_dimension()
+	const INT64* srcidxs0 = twit->axs[0]->srcidxs;
+	const INT64* dstidxs0 = twit->axs[0]->dstidxs;
+	const double* ws0 = twit->axs[0]->weights;
+
+
+	const INT64* srcidxs1 = twit->axs[1]->srcidxs;
+	const INT64* dstidxs1 = twit->axs[1]->dstidxs;
+	const double* ws1 = twit->axs[1]->weights;
+	const INT64 L1 = twit->axs[1]->length;
+
+
+	const INT64* srcidxs2 = twit->axs[2]->srcidxs;
+	const INT64* dstidxs2 = twit->axs[2]->dstidxs;
+	const double* ws2 = twit->axs[2]->weights;
+	const INT64 L2 = twit->axs[2]->length;
+
+
+	const INT64* srcidxs3 = twit->axs[3]->srcidxs;
+	const INT64* dstidxs3 = twit->axs[3]->dstidxs;
+	const double* ws3 = twit->axs[3]->weights;
+	const INT64 L3 = twit->axs[3]->length;
+
+	const INT64* srcidxs4 = twit->axs[4]->srcidxs;
+	const INT64* dstidxs4 = twit->axs[4]->dstidxs;
+	const double* ws4 = twit->axs[4]->weights;
+	const INT64 L4 = twit->axs[4]->length;
+
+	const INT64* srcidxs5 = twit->axs[5]->srcidxs;
+	const INT64* dstidxs5 = twit->axs[5]->dstidxs;
+	const double* ws5 = twit->axs[5]->weights;
+	const INT64 L5 = twit->axs[5]->length;
+	if (L == 6) {
+		if (dbg) twit_log("_apply_twit  6D\n");
+		const INT64 srcadvance4 = t1_dims[5];
+		const INT64 dstadvance4 = t2_dims[5];
+		const INT64 srcadvance3 = t1_dims[4] * srcadvance4;
+		const INT64 dstadvance3 = t2_dims[4] * dstadvance4;
+		const INT64 srcadvance2 = t1_dims[3] * srcadvance3;
+		const INT64 dstadvance2 = t2_dims[3] * dstadvance3;
+		const INT64 srcadvance1 = t1_dims[2] * srcadvance2;
+		const INT64 dstadvance1 = t2_dims[2] * dstadvance2;
+		const INT64 srcadvance0 = t1_dims[1] * srcadvance1;
+		const INT64 dstadvance0 = t2_dims[1] * dstadvance1;
+		if (preclear) {
+			for (INT64 i0 = 0; i0 < L0; i0++) {
+				const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+				for (INT64 i1 = 0; i1 < L1; i1++) {
+					const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+					for (INT64 i2 = 0; i2 < L2; i2++) {
+						const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+						for (INT64 i3 = 0; i3 < L3; i3++) {
+							const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+							for (INT64 i4 = 0; i4 < L4; i4++) {
+								const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+								for (INT64 i5 = 0; i5 < L5; i5++) {
+									if ((srcidxs5[i5] & twit_thread_mask) == N) {
+										t2[dstidxs5[i5] + doff4] = 0.0;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		for (INT64 i0 = 0; i0 < L0; i0++) {
+			const INT64 soff0 = srcadvance0 * srcidxs0[i0];
+			const INT64 doff0 = dstadvance0 * dstidxs0[i0];
+			const double w0 = ws0[i0];
+			for (INT64 i1 = 0; i1 < L1; i1++) {
+				const INT64 soff1 = soff0 + srcadvance1 * srcidxs1[i1];
+				const INT64 doff1 = doff0 + dstadvance1 * dstidxs1[i1];
+				const double w1 = ws1[i1] * w0;
+				for (INT64 i2 = 0; i2 < L2; i2++) {
+					const INT64 soff2 = soff1 + srcadvance2 * srcidxs2[i2];
+					const INT64 doff2 = doff1 + dstadvance2 * dstidxs2[i2];
+					const double w2 = ws2[i2] * w1;
+					for (INT64 i3 = 0; i3 < L3; i3++) {
+						const INT64 soff3 = soff2 + srcadvance3 * srcidxs3[i3];
+						const INT64 doff3 = doff2 + dstadvance3 * dstidxs3[i3];
+						const double w3 = ws3[i3] * w2;
+						for (INT64 i4 = 0; i4 < L4; i4++) {
+							const INT64 soff4 = soff3 + srcadvance4 * srcidxs4[i4];
+							const INT64 doff4 = doff3 + dstadvance4 * dstidxs4[i4];
+							const double w4 = ws4[i4] * w3;
+							for (INT64 i5 = 0; i5 < L5; i5++) {
+								if ((srcidxs5[i5] & twit_thread_mask) == N) {
+									t2[dstidxs5[i5] + doff4] += t1[srcidxs5[i5] + soff4] * w4 * ws5[i5];
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return;
+	}
+	else {
+		// Tsk tsk tsk, unimplemented number of dimensions.
+		// They're all custom for each supported dimension count.
+		// May implement a slower generic size handler for large numbers of dimensions?
+		twit_log("_apply_twit  UNSUPPORTED TWIT Dimensions count.  Max is 6 Dimensions.\n");
+		throw 42;
+	}
+}
+
 void twit_multi_axis_destructor(PyObject* obj) {
 	//twit_log("twit_multi_axis_destructor\n");
 	twit_multi_axis* ptr = (twit_multi_axis*)PyCapsule_GetPointer(obj, "twit_multi_axis");
@@ -1685,19 +2881,22 @@ PyObject* make_and_apply_twit_impl(PyObject*, PyObject* args) {
 
 }
 
-void twit_apply_MT_sequencer() {
+void twit_apply_MT_sequencer(twit_processing_context* ctx) {
 	bool dbg = false;
-	if (dbg) twit_log("twit_apply_MT_sequencer - lock...\n");
+	if (dbg) twit_log("twit_apply_MT_sequencer: Locking.\n");
 	std::lock_guard<std::recursive_mutex> guard(twit_mt_mutex);
-	if (dbg) twit_log("twit_apply_MT_sequencer\n");
+	if (dbg) twit_log("twit_apply_MT_sequencer: Locked ok. Copy ctx.\n");
+	copy_ctx_to_threads(ctx);
+	if (dbg) twit_log("twit_apply_MT_sequencer: Kickoff all.\n");
 	twit_thread_kickoff_all_loops();
+	if (dbg) twit_log("twit_apply_MT_sequencer: Wait all.\n");
 	twit_thread_wait_for_all_loops_to_finish();
-	if (dbg) twit_log("twit_apply_MT_sequencer DONE\n");
+	if (dbg) twit_log("twit_apply_MT_sequencer: Done.\n");
 }
 
 void twit_apply_MT(int N) {
 	bool dbg = false;
-	if(dbg) twit_log("Thread %d start\n", N);
+	if (dbg) twit_log("Thread %d start\n", N);
 
 	// How did we get here if it is single threadded?????
 	assert(twit_thread_count > 1);
@@ -1713,14 +2912,19 @@ void twit_apply_MT(int N) {
 		_apply_twit_MT_axis_0(ctx, N);
 		break;
 	case 1:
+		_apply_twit_MT_axis_1(ctx, N);
 		break;
 	case 2:
+		_apply_twit_MT_axis_2(ctx, N);
 		break;
 	case 3:
+		_apply_twit_MT_axis_3(ctx, N);
 		break;
 	case 4:
+		_apply_twit_MT_axis_4(ctx, N);
 		break;
 	case 5:
+		_apply_twit_MT_axis_5(ctx, N);
 		break;
 	default:
 		twit_log("Invalid threadding axis.\n");
@@ -1758,23 +2962,29 @@ void twit_thread_loop(int N) {
 }
 
 void twit_thread_kickoff_all_loops() {
+	bool dbg = false;
 	for (int i = 0; i < twit_thread_count; i++) {
 		{
+			if (dbg) twit_log("twit_thread_kickoff_all_loops: wait lock %d\n", i);
 			std::unique_lock<std::mutex> lock(*(twit_thread_bundles[i]->mtx));
 			twit_thread_bundles[i]->mutex_count = 1;
+			if (dbg) twit_log("twit_thread_kickoff_all_loops: notify_one, %d\n", i);
 			twit_thread_bundles[i]->mutex_cvar->notify_one();
 		}
 	}
 }
 
 void twit_thread_wait_for_all_loops_to_finish() {
+	bool dbg = false;
 	for (int i = 0; i < twit_thread_count; i++) {
 		{
+			if (dbg) twit_log("twit_thread_wait_for_all_loops_to_finish: wait lock %d\n", i);
 			std::unique_lock<std::mutex> lock(*(twit_thread_bundles[i]->mtx));
 			while (twit_thread_bundles[i]->mutex_count == 1) {
 				// While waiting the function wait automatically releases the lock
 				// and re-acquires it when signaled to via notify_one().
 				twit_thread_bundles[i]->mutex_cvar->wait(lock);
+				if (dbg) twit_log("twit_thread_kickoff_all_loops: wait done, %d\n", i);
 			}
 		}
 	}
