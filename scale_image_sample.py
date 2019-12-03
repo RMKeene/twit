@@ -78,6 +78,6 @@ def scale_image_C_code():
 if __name__ == '__main__':
     print("Scale Image with twit sample program.")
     
-    #scale_image()
+    scale_image()
     
     scale_image_C_code()
