@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{5fae73ad-5d99-46f0-82d6-22f11a1ee5ff}</ProjectGuid>
     <ProjectHome>..\</ProjectHome>
-    <StartupFile>twit\scale_image_sample.py</StartupFile>
+    <StartupFile>twit\twitc_test.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>

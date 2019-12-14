@@ -212,7 +212,7 @@ class TestTwitc(unittest.TestCase):
         npt.assert_array_almost_equal(t2, a)
 
         # And test reuse of twt.
-        t1 = np.ones((5, 3)
+        t1 = np.ones((5, 3))
         t1[1, 1] = 0.5
         t2 = np.ones((4, 5))
         twitc.apply_twit(twt, t1, t2, 1)
