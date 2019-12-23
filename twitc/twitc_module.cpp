@@ -8,6 +8,8 @@
 
 #include <numpy/arrayobject.h>
 
+const char const* TWITC_VERSION = "TWITC Version 1.0";
+
 struct range_series {
 	INT64 length;
 	INT64* idxs;
@@ -86,6 +88,7 @@ void _make_and_apply_twit(INT64 n_dims, double* t1, INT64* t1_dims, double* t2, 
 void twit_multi_axis_destructor(PyObject* obj);
 
 
+PyObject* twitc_version_impl(PyObject*, PyObject* args);
 PyObject* twit_set_thread_count_impl(PyObject*, PyObject* args);
 PyObject* twitc_interp_impl(PyObject*, PyObject* args);
 PyObject* find_range_series_multipliers_impl(PyObject*, PyObject* args);
@@ -99,6 +102,7 @@ PyObject* pack_twit_multi_axis_impl(PyObject*, PyObject* args);
 
 static PyMethodDef twitc_methods[] = {
 
+	{ "twitc_version", (PyCFunction)twitc_version_impl, METH_VARARGS, "Return the version of TWITC.  Used for testing if the .lib or .dll is linking in ok." },
 	{ "set_thread_count", (PyCFunction)twit_set_thread_count_impl, METH_VARARGS, "Set how many threads to use for twit processing.  Must be one of 1, 2, 4, 8, 16, 32, 64, 128, 256. Only can be called once." },
 	{ "twit_interp", (PyCFunction)twitc_interp_impl, METH_VARARGS, "Interpolate a float value along an integer range with index." },
 	{ "find_range_series_multipliers", (PyCFunction)find_range_series_multipliers_impl, METH_VARARGS, "Generate two lists of int index and float fractional value used for single axis interpolation calc." },
@@ -362,6 +366,11 @@ PyObject* twit_set_thread_count_impl(PyObject*, PyObject* args) {
 
 	Py_INCREF(Py_False);
 	return Py_False;
+}
+
+
+PyObject* twitc_version_impl(PyObject*, PyObject* args) {
+	return Py_BuildValue("s", TWITC_VERSION);;
 }
 
 PyObject* twitc_interp_impl(PyObject*, PyObject* args) {

@@ -12,6 +12,10 @@ class TestTwitc(unittest.TestCase):
     def setUp(self):
         pass
     
+    def test_AAA_version(self):
+        v = twitc.twitc_version()
+        assert v == "TWITC Version 1.0";
+
     def test_AA_interp(self):
         self.assertAlmostEqual(twit_interp(0, 10, 0.0, 5.0, 0), 0.0)
         self.assertAlmostEqual(twit_interp(0, 10, 0.0, 5.0, 11), 5.5)
