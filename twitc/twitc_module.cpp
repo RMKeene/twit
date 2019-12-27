@@ -8,7 +8,7 @@
 
 #include <numpy/arrayobject.h>
 
-const char const* TWITC_VERSION = "TWITC Version 1.0";
+const char * TWITC_VERSION = "TWITC Version 1.0";
 
 struct range_series {
 	INT64 length;
@@ -769,7 +769,7 @@ float axis_quality(int total_axis_count, int axis_index, int axis_length) {
 		return -1;
 	}
 
-	float aq = pow((float)axis_length, 1.1f) + 100.0 * pow((float)(total_axis_count - axis_index), 2.0f);
+	float aq = pow((float)axis_length, 1.1f) + 100.0f * pow((float)(total_axis_count - axis_index), 2.0f);
 	if (dbg) twit_log("Axis %d of %d. Axis length %d, quality %f\n", axis_index, total_axis_count, axis_length, aq);
 	return aq;
 }
