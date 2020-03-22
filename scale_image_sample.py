@@ -1,3 +1,5 @@
+import builtins
+
 import numpy as np
 import twit
 import twitc
@@ -11,7 +13,8 @@ def scale_image():
     Test code and example to scale an image using Twit.
     """
     print("SCALE IMAGE - Pure Python")
-    im = Image.open(r"K:\twit\dog1.jpg")
+    fp = builtins.open(r"K:\twit\dog1.jpg", "rb")
+    im = Image.open(fp)
     plt.imshow(im, cmap='Greys_r')
     plt.show()
     pass

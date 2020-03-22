@@ -5,13 +5,13 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{5fae73ad-5d99-46f0-82d6-22f11a1ee5ff}</ProjectGuid>
     <ProjectHome>..\</ProjectHome>
-    <StartupFile>twit\twitc_test.py</StartupFile>
+    <StartupFile>twit\twit_test.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <InterpreterId>MSBuild|TwitPyEnv|$(MSBuildProjectFullPath)</InterpreterId>
+    <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
@@ -23,6 +23,7 @@
     <OutputPath>bin\Fast Debug\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="requirements.txt" />
     <Content Include="twit\dog1.jpg" />
     <Content Include="twit\PackagingCommands.txt" />
   </ItemGroup>
@@ -45,15 +46,18 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Interpreter Include="TwitPyEnv\">
-      <Id>TwitPyEnv</Id>
+    <Interpreter Include="env\">
+      <Id>env</Id>
       <Version>3.7</Version>
-      <Description>TwitPyEnv (Python 3.7 (64-bit))</Description>
+      <Description>env (Python 3.7 (64-bit))</Description>
       <InterpreterPath>Scripts\python.exe</InterpreterPath>
       <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
       <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
       <Architecture>X64</Architecture>
     </Interpreter>
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.7" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
 </Project>

@@ -3,10 +3,12 @@ Test for Tensor Weighted Interpolation Transfers (twit module) twit.py
 """
 import unittest
 
+import numpy as np
 import numpy.testing as npt
 import numpy.testing as nt
 
 from twit import *
+from twit.twit import RangeSeries, TwitSingleAxis, TwitMultiAxis
 
 
 class TestTwit(unittest.TestCase):
@@ -89,6 +91,32 @@ class TestTwit(unittest.TestCase):
         self.assertEqual(a, (3, False))
         a = try_parse_int("-3", 3)
         self.assertEqual(a, (-3, True))
+
+    def test_BCA_string_to_multi_axis(self):
+        src = np.zeros((5, 6))
+        dst = np.zeros((2, 9, 4))
+        p = twit.twit_str_to_multi_params(src.shape, dst.shape, "{0_4, 2} <0_1, 2, 2_3> [1_1, 0_1, 0.5_0.6]")
+        assert len(p) == 3
+        assert p[0] == 3
+        nt.assert_almost_equal(p[1], ([0, 0, 0, 4, 2, 2, 0, 1, 2, 2, 2, 3]))
+        nt.assert_almost_equal(p[2], ([1.0, 1.0, 0.0, 1.0, 0.5, 0.6]))
+        s = twit.twit_multi_params_to_str(*p)
+        assert s == '{0_0, 0_4, 2_2} <0_1, 2_2, 2_3> [1_1, 0_1, 0.5_0.6]'
+
+        p = twit.twit_str_to_multi_params(src.shape, dst.shape, "")
+        assert len(p) == 3
+        assert p[0] == 3
+        nt.assert_almost_equal(p[1], ([0, 0, 0, 4, 0, 5, 0, 1, 0, 8, 0, 3]))
+        nt.assert_almost_equal(p[2], ([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
+
+        p = twit.twit_str_to_multi_params(src, dst, "{} <1> [0.4_0.5]")
+        assert len(p) == 3
+        assert p[0] == 3
+        nt.assert_almost_equal(p[1], ([0, 0, 0, 4, 0, 5, 0, 1, 0, 8, 1, 1]))
+        nt.assert_almost_equal(p[2], ([1.0, 1.0, 1.0, 1.0, 0.4, 0.5]))
+
+        # compute_twit_multi_dimension(*p)
+        pass
 
     def test_BC_string_parsing(self):
         a = twit_string_to_ranges_internal(0, 10, 0, 3, 0.1, 0.8, "{5,17} <2,3> [-0.1, 0.9]")

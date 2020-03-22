@@ -29,7 +29,7 @@ connections between concept maps. Also lets one do image scale and crop on tenso
 without having to resort to PIL scale etc. and conversion back and forth.
 """
 
-from typing import Tuple, Optional, AnyStr, List, Sequence
+from typing import Tuple, Optional, AnyStr, List, Sequence, Union
 import numpy as np
 
 # Source and destination span are the same.
@@ -208,7 +208,8 @@ def gen_twit_param_from_shapes(sh1: Tuple, sh2: Tuple,
     return ret
 
 
-def gen_twit_param(t1: np.ndarray, t2: np.ndarray, weight_axis: int = -1, weight_range: tuple = (1.0, 1.0)):
+def gen_twit_param(t1: np.ndarray, t2: np.ndarray, weight_axis: int = -1, weight_range: tuple = (1.0, 1.0)) -> \
+        Tuple[int, Sequence[int], Sequence[float]]:
     """
     Generate and return the twit specification tuples that will
     transfer all of t1 to t2 along all axes with weight 1.0.
@@ -218,6 +219,13 @@ def gen_twit_param(t1: np.ndarray, t2: np.ndarray, weight_axis: int = -1, weight
     Save lots of mistakes by using twit.py as as an index generatore like
 
     python twit.py (4,6,3) (7,8)  and it will generate the params.
+
+    # Scale image to match.
+    t2: np.ndarray = np.zeros(self.client_concept_map.get_shape())
+    twit_params: Tuple[int, Sequence[int], Sequence[float]] = twit.gen_twit_param(self.np_im, t2)
+    twt = twit.compute_twit_multi_dimension(*twit_params)
+    twitc.apply_twit(twt, self.np_im, t2, 0)
+
     """
     return gen_twit_param_from_shapes(t1.shape, t2.shape, weight_axis=weight_axis, weight_range=weight_range)
 
@@ -242,6 +250,182 @@ def outside_range(start: int, end: int, idx: int) -> bool:
     if start <= end:
         return idx < start or idx > end
     return idx < end or idx > start
+
+
+def twit_str_to_multi_params(
+        src_shape: Union[Tuple, np.ndarray], dst_shape: Union[Tuple, np.ndarray],
+        s: AnyStr) -> Tuple:
+    """ Takes like  src shape (5, 4) and dst shape (8, 3, 2) and
+    s of '{0_4, 1_3} <0_8, 0_3, 2_3> [1_1, 0_1, 0.5_0.6]'  and creates the
+    three tuples needed by compute_twit_multi_dimension. Does bounds checking and defaults values.
+    You can then pass the tuples in as the params with *t
+    The above example will return (3, [0, 0, 0, 4, 1, 3, 0, 8, 0, 3, 2, 3], [1.0, 1.0, 0.0, 1.0, 0.5, 0.6])
+    Being (axis_count,
+        [srclow[0], srcHi[0], srclow[1], srcHi[1], srclow[2], srcHi[2],
+         dstlow[0], dstHi[0], dstlow[1], dstHi[1], dstlow[1], dstHi[1]],
+        [wLow[0], wHi[0], wLow[1], wHi[1], wLow[2], wHi[2]])
+    Note that ranges like 0_4 mean 0,1,2,3,4 so are inclusive.
+    Errors cause a return of (False, "error reason")
+    Note src_shape and dst_shape can be ndarray, Tuple (being the concept map shape).
+    """
+
+    if isinstance(src_shape, np.ndarray):
+        src_shape = src_shape.shape
+    elif isinstance(src_shape, Tuple):
+        pass
+    else:
+        assert False, "twit_str_to_multi_params: Expects src of Tuple or np.ndarray"
+
+    if isinstance(dst_shape, np.ndarray):
+        dst_shape = dst_shape.shape
+    elif isinstance(dst_shape, Tuple):
+        pass
+    else:
+        assert False, "twit_str_to_multi_params: Expects dst of Tuple or np.ndarray"
+    # get the three parts if present
+    src_clause = ""
+    dst_clause = ""
+    w_clause = ""
+
+    src_shape, dst_shape = match_shape_lengths(src_shape, dst_shape)
+
+    index_params = [0] * (len(src_shape) * 4)
+    weight_params = [1.0] * (len(src_shape) * 2)
+
+    # SRC
+    src_clause_start_idx = s.find("{")
+    if src_clause_start_idx >= 0:
+        src_clause_end_idx = s.find("}")
+        if src_clause_end_idx > src_clause_start_idx:
+            src_clause = s[src_clause_start_idx + 1: src_clause_end_idx]
+        else:
+            return False, "Invalid source, no closing }"
+
+    src_clauses = split_strip(src_clause, sep=",")
+    while len(src_clauses) < len(src_shape):
+        src_clauses.insert(0, "")
+    for i in range(len(src_shape)):
+        inner_parts = split_strip(src_clauses[i], sep='_')
+        if len(inner_parts) == 0:
+            index_params[i * 2] = 0
+            index_params[i * 2 + 1] = src_shape[i] - 1
+        elif len(inner_parts) == 1:
+            v, b = try_parse_int(inner_parts[0])
+            if b and 0 <= v < src_shape[i]:
+                index_params[i * 2] = int(v)
+                index_params[i * 2 + 1] = int(v)
+            else:
+                return False, "Invalid source index for dimension %d" % (i,)
+        else:
+            v, b = try_parse_int(inner_parts[0])
+            if b and 0 <= v < src_shape[i]:
+                index_params[i * 2] = int(v)
+            else:
+                return False, "Invalid source index for dimension %d" % (i,)
+            v, b = try_parse_int(inner_parts[1])
+            if b and 0 <= v < src_shape[i]:
+                index_params[i * 2 + 1] = int(v)
+            else:
+                return False, "Invalid source index for dimension %d" % (i,)
+
+    dst_clause_start_idx = s.find("<")
+    if dst_clause_start_idx >= 0:
+        dst_clause_end_idx = s.find(">")
+        if dst_clause_end_idx > dst_clause_start_idx:
+            dst_clause = s[dst_clause_start_idx + 1: dst_clause_end_idx]
+        else:
+            return False, "Invalid destination, no closing >"
+
+    dst_clauses = split_strip(dst_clause, sep=",")
+    while len(dst_clauses) < len(dst_shape):
+        dst_clauses.insert(0, "")
+    index_params_offset = len(dst_shape) * 2
+    for i in range(len(dst_shape)):
+        inner_parts = split_strip(dst_clauses[i], sep='_')
+        if len(inner_parts) == 0:
+            index_params[index_params_offset + i * 2] = 0
+            index_params[index_params_offset + i * 2 + 1] = dst_shape[i] - 1
+        elif len(inner_parts) == 1:
+            v, b = try_parse_int(inner_parts[0])
+            if b and 0 <= v < dst_shape[i]:
+                index_params[index_params_offset + i * 2] = int(v)
+                index_params[index_params_offset + i * 2 + 1] = int(v)
+            else:
+                return False, "Invalid destination index for dimension %d" % (i,)
+        else:
+            v, b = try_parse_int(inner_parts[0])
+            if b and 0 <= v < dst_shape[i]:
+                index_params[index_params_offset + i * 2] = int(v)
+            else:
+                return False, "Invalid destination index for dimension %d" % (i,)
+            v, b = try_parse_int(inner_parts[1])
+            if b and 0 <= v < dst_shape[i]:
+                index_params[index_params_offset + i * 2 + 1] = int(v)
+            else:
+                return False, "Invalid destination index for dimension %d" % (i,)
+
+    w_clause_start_idx = s.find("[")
+    if w_clause_start_idx >= 0:
+        w_clause_end_idx = s.find("]")
+        if w_clause_end_idx > w_clause_start_idx:
+            w_clause = s[w_clause_start_idx + 1: w_clause_end_idx]
+        else:
+            return False, "Invalid weights, no closing ]"
+
+    w_clauses = split_strip(w_clause, sep=",")
+    while len(w_clauses) < len(src_shape):
+        w_clauses.insert(0, "")
+    for i in range(len(src_shape)):
+        inner_parts = split_strip(w_clauses[i], sep='_')
+        if len(inner_parts) == 0:
+            weight_params[i * 2] = 1.0
+            weight_params[i * 2 + 1] = 1.0
+        elif len(inner_parts) == 1:
+            v, b = try_parse_float(inner_parts[0])
+            if b:
+                weight_params[i * 2] = v
+                weight_params[i * 2 + 1] = v
+            else:
+                return False, "Invalid weight index for dimension %d" % (i,)
+        else:
+            v, b = try_parse_float(inner_parts[0])
+            if b:
+                weight_params[i * 2] = v
+            else:
+                return False, "Invalid weight index for dimension %d" % (i,)
+            v, b = try_parse_float(inner_parts[1])
+            if b:
+                weight_params[i * 2 + 1] = v
+            else:
+                return False, "Invalid weight index for dimension %d" % (i,)
+
+    return len(src_shape), np.array(index_params, dtype=np.int64), np.array(weight_params, dtype=np.float64)
+
+
+def format_float(f):
+    if f - float(int(f)) == 0.0:
+        return str(int(f))
+    s = ("%20.15f" % (f,)).lstrip(" ").rstrip("0")
+    return s
+
+
+def twit_multi_params_to_str(n_dims: int, twit_i: Sequence[int], twit_w: Sequence[float]) -> str:
+    src = "{"
+    dst = "<"
+    w = "["
+    nd2 = n_dims * 2
+    for i in range(n_dims):
+        if i > 0:
+            src += ", "
+            dst += ", "
+            w += ", "
+        src += "%d_%d" % (twit_i[i * 2], twit_i[i * 2 + 1])
+        dst += "%d_%d" % (twit_i[nd2 + i * 2], twit_i[nd2 + i * 2 + 1])
+        w += "%s_%s" % (format_float(twit_w[i * 2]), format_float(twit_w[i * 2 + 1]))
+    src += "} "
+    dst += "> "
+    w += "]"
+    return src + dst + w
 
 
 def twit_str_to_ranges(src: np.ndarray, src_shape_idx: int,
@@ -558,17 +742,18 @@ def compute_twit_single_dimension(
 # in python order.  twit_w is pairs for dimension weights, w_start, w_end
 # repeating in python order for the dimensions.
 def compute_twit_multi_dimension(n_dims: int, twit_i: Sequence[int], twit_w: Sequence[float]) -> TwitMultiAxis:
-    # Generate axis series'
+    # Generate axis series
     twit = TwitMultiAxis(n_dims)
     # print("_compute_twit_multi_dimension: n_dims %llD", n_dims)
 
+    dst_start = n_dims * 2
     for i in range(0, n_dims):
         # print(" _compute_twit_multi_dimension: %llD", i)
-        i2 = i * 2
-        i4 = i * 4
+        wi = srci = i * 2
+        dsti = dst_start + i * 2
         twit.axs.append(
-            compute_twit_single_dimension(twit_i[i4], twit_i[i4 + 1], twit_i[i4 + 2], twit_i[i4 + 3], twit_w[i2],
-                                          twit_w[i2 + 1]))
+            compute_twit_single_dimension(twit_i[srci], twit_i[srci + 1], twit_i[dsti], twit_i[dsti + 1], twit_w[wi],
+                                          twit_w[wi + 1]))
 
     return twit
 

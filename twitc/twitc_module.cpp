@@ -8,7 +8,7 @@
 
 #include <numpy/arrayobject.h>
 
-const char * TWITC_VERSION = "TWITC Version 1.0";
+const char* TWITC_VERSION = "TWITC Version 1.0";
 
 struct range_series {
 	INT64 length;
@@ -689,13 +689,15 @@ twit_multi_axis* _compute_twit_multi_dimension(const INT64 n_dims, INT64 const* 
 	twit->axs = (twit_single_axis**)PyMem_Malloc(n_dims * sizeof(twit_single_axis*));
 	//twit_log("_compute_twit_multi_dimension: n_dims %lld\n", n_dims);
 
+	INT64 const* const dst_start = twit_i + n_dims * 2LL;
 	for (INT64 i = 0; i < n_dims; i++) {
 		//twit_log(" _compute_twit_multi_dimension: %lld\n", i);
 		// This points to t1_start, t1_end, t2_start, t2_end
-		INT64 const* const twit_ii = twit_i + i * 4LL;
+		INT64 const* const srci = twit_i + i * 2LL;
+		INT64 const* const dsti = dst_start + i * 2LL;
 		// This points to w_start, w_end
-		double const* const twit_wi = twit_w + i * 2LL;
-		twit->axs[i] = _compute_twit_single_dimension(twit_ii[0], twit_ii[1], twit_ii[2], twit_ii[3], twit_wi[0], twit_wi[1]);
+		double const* const wi = twit_w + i * 2LL;
+		twit->axs[i] = _compute_twit_single_dimension(srci[0], srci[1], dsti[0], dsti[1], wi[0], wi[1]);
 	}
 
 	//print_twit_multi_axis(twit, 0, "TWIT: ");
